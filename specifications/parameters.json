@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Parameters Schema",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "object",
+      "description": "The type of the parameters object (must be 'object')"
+    },
+    "properties": {
+      "type": "object",
+      "description": "Map of field names to their schema definitions",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "integer", "boolean", "object", "array"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "enum": {
+            "type": "array",
+            "items": {
+              "type": ["string", "number", "boolean", "null"]
+            }
+          },
+          "items": {
+            "$ref": "#/definitions/schema"
+          },
+          "properties": {
+            "$ref": "#/definitions/properties"
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {},
+          "format": {
+            "type": "string"
+          }
+        },
+        "required": ["type"]
+      }
+    },
+    "required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": {
+      "type": "boolean"
+    }
+  },
+  "required": ["type", "properties"],
+  "definitions": {
+    "schema": {
+      "type": "object"
+    },
+    "properties": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/schema"
+      }
+    }
+  }
+}

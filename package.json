@@ -1,0 +1,24 @@
+{
+  "name": "ai-coding-agent",
+  "version": "1.0.0",
+  "description": "an ai coding agent",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitovi/ai-coding-agent.git"
+  },
+  "keywords": [
+    "ai",
+    "coding",
+    "agent"
+  ],
+  "author": "Bitovi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bitovi/ai-coding-agent/issues"
+  },
+  "homepage": "https://github.com/bitovi/ai-coding-agent#readme"
+}

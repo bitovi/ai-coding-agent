@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OAuthProviderConfiguration",
+  "type": "object",
+  "required": ["issuer", "authorization_endpoint", "token_endpoint", "client_id", "client_type"],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "description": "Human-readable name of the OAuth provider"
+    },
+    "issuer": {
+      "type": "string",
+      "format": "uri",
+      "description": "The issuer URL of the OAuth server"
+    },
+    "authorization_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "OAuth 2.0 authorization endpoint URL"
+    },
+    "token_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "OAuth 2.0 token endpoint URL"
+    },
+    "userinfo_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional userinfo endpoint for OpenID Connect"
+    },
+    "jwks_uri": {
+      "type": "string",
+      "format": "uri",
+      "description": "JWKS URI for token validation (OIDC)"
+    },
+    "code_challenge_methods_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["plain", "S256"]
+      },
+      "description": "List of PKCE code challenge methods supported"
+    },
+    "supports_pkce": {
+      "type": "boolean",
+      "description": "Explicit flag indicating PKCE support (overrides detection)"
+    },
+    "scopes_supported": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional list of supported scopes"
+    },
+    "grant_types_supported": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of supported grant types"
+    },
+    "token_endpoint_auth_methods_supported": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Auth methods for token endpoint (e.g., client_secret_post)"
+    },
+    "client_type": {
+      "type": "string",
+      "enum": ["confidential", "public"],
+      "description": "OAuth client type; determines whether client_secret is needed"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Client identifier issued by the OAuth provider"
+    },
+    "client_secret": {
+      "type": "string",
+      "description": "Client secret (required for confidential clients)"
+    },
+    "additional_config": {
+      "type": "object",
+      "description": "Any other provider-specific options",
+      "additionalProperties": true
+    }
+  }
+}
