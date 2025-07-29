@@ -12,7 +12,7 @@ export class WebUIService {
    * Render the main index page
    */
   renderIndexPage(req, res, { prompts, mcpServers, authManager, user }) {
-    const promptsHTML = this.renderPromptsList(prompts, authManager);
+    const promptsHTML = this.renderPromptsList(prompts, mcpServers, authManager);
     const connectionsHTML = this.renderConnectionsList(mcpServers, authManager);
 
     const html = this.baseHTML
@@ -125,7 +125,7 @@ export class WebUIService {
   /**
    * Render prompts list
    */
-  renderPromptsList(prompts, authManager) {
+  renderPromptsList(prompts, mcpServers, authManager) {
     if (prompts.length === 0) {
       return `
         <div class="empty-state">
@@ -135,9 +135,26 @@ export class WebUIService {
       `;
     }
 
+    // Create a map of server names to server objects for quick lookup
+    const serverMap = new Map();
+    mcpServers.forEach(server => {
+      serverMap.set(server.name, server);
+    });
+
     const promptCards = prompts.map(prompt => {
       const mcpServerStatuses = prompt.mcp_servers.map(serverName => {
-        const isAuthorized = authManager.isAuthorized(serverName);
+        const server = serverMap.get(serverName);
+        
+        // Check authorization in priority order:
+        // 1. Pre-configured authorization_token in config
+        // 2. Environment variable: MCP_{name}_authorization_token  
+        // 3. OAuth tokens from AuthManager
+        const hasConfigToken = server && server.authorization_token;
+        const envTokenKey = `MCP_${serverName}_authorization_token`;
+        const hasEnvToken = process.env[envTokenKey];
+        const hasOAuthToken = authManager.isAuthorized(serverName);
+        
+        const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
         const statusClass = isAuthorized ? 'status-authorized' : 'status-unauthorized';
         return `
           <li>
@@ -147,7 +164,17 @@ export class WebUIService {
         `;
       }).join('');
 
-      const allAuthorized = prompt.mcp_servers.every(serverName => authManager.isAuthorized(serverName));
+      const allAuthorized = prompt.mcp_servers.every(serverName => {
+        const server = serverMap.get(serverName);
+        
+        // Same authorization check logic
+        const hasConfigToken = server && server.authorization_token;
+        const envTokenKey = `MCP_${serverName}_authorization_token`;
+        const hasEnvToken = process.env[envTokenKey];
+        const hasOAuthToken = authManager.isAuthorized(serverName);
+        
+        return hasConfigToken || hasEnvToken || hasOAuthToken;
+      });
 
       return `
         <div class="card">
@@ -190,7 +217,16 @@ export class WebUIService {
     }
 
     const connectionCards = mcpServers.map(server => {
-      const isAuthorized = server.authorization_token || authManager.isAuthorized(server.name);
+      // Check authorization in priority order:
+      // 1. Pre-configured authorization_token in config
+      // 2. Environment variable: MCP_{name}_authorization_token
+      // 3. OAuth tokens from AuthManager
+      const hasConfigToken = server.authorization_token;
+      const envTokenKey = `MCP_${server.name}_authorization_token`;
+      const hasEnvToken = process.env[envTokenKey];
+      const hasOAuthToken = authManager.isAuthorized(server.name);
+      
+      const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
       const statusClass = isAuthorized ? 'status-authorized' : 'status-unauthorized';
       const statusText = isAuthorized ? 'Authorized' : 'Not Authorized';
 

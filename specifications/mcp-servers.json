@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Server Configuration Schema",
+  "description": "Schema for configuring MCP (Model Context Protocol) servers in the AI Coding Agent",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Unique identifier for the MCP server"
+      },
+      "type": {
+        "type": "string",
+        "enum": ["url", "stdio"],
+        "description": "Transport type: 'url' for network-based servers (HTTP, SSE, WebSocket, etc.) or 'stdio' for local subprocess servers"
+      },
+      "url": {
+        "type": "string",
+        "description": "The URL or endpoint for the MCP server. For stdio type, use 'file://localhost' or similar"
+      },
+      "authorization_token": {
+        "type": ["string", "null"],
+        "description": "Pre-configured authorization token, or null if OAuth flow is required"
+      },
+      "tool_configuration": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the MCP server tools are enabled",
+            "default": true
+          },
+          "allowed_tools": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            },
+            "description": "List of allowed tool names, or null for all tools"
+          },
+          "allowed_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For stdio servers: List of allowed file system paths"
+          }
+        },
+        "additionalProperties": false
+      },
+      "oauth_provider_configuration": {
+        "type": ["object", "null"],
+        "description": "OAuth configuration for servers requiring OAuth authentication. If null, OAuth discovery will be attempted.",
+        "$ref": "oauth-provider-configuration.json"
+      }
+    },
+    "required": ["name", "type", "url"],
+    "additionalProperties": false
+  },
+  "examples": [
+    {
+      "name": "jira",
+      "type": "url",
+      "url": "https://mcp.atlassian.com/v1/sse",
+      "authorization_token": null,
+      "tool_configuration": {
+        "enabled": true
+      },
+      "oauth_provider_configuration": null
+    },
+    {
+      "name": "github",
+      "type": "url", 
+      "url": "https://api.githubcopilot.com/mcp/",
+      "authorization_token": "ghp_example_token_here",
+      "tool_configuration": {
+        "enabled": true
+      }
+    },
+    {
+      "name": "local-files",
+      "type": "stdio",
+      "url": "file://localhost",
+      "authorization_token": "local_access_token",
+      "tool_configuration": {
+        "enabled": true,
+        "allowed_paths": ["/Users/username/projects"]
+      }
+    }
+  ]
+}

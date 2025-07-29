@@ -115,7 +115,7 @@ export class ConfigManager {
       }
 
       const mcpServer = {
-        type: server.type === 'sse' ? 'url' : server.type,
+        type: "url", // Always send "url" to Claude for all MCP servers
         url: server.url,
         name: server.name,
         tool_configuration: server.tool_configuration || { enabled: true }
@@ -125,9 +125,18 @@ export class ConfigManager {
       if (server.authorization_token) {
         mcpServer.authorization_token = server.authorization_token;
       } else {
-        const tokens = authManager.getTokens(serverName);
-        if (tokens && tokens.access_token) {
-          mcpServer.authorization_token = tokens.access_token;
+        // Check for environment variable override: MCP_{name}_authorization_token
+        const envTokenKey = `MCP_${serverName}_authorization_token`;
+        const envToken = process.env[envTokenKey];
+        
+        if (envToken) {
+          mcpServer.authorization_token = envToken;
+        } else {
+          // Fallback to OAuth tokens from AuthManager
+          const tokens = authManager.getTokens(serverName);
+          if (tokens && tokens.access_token) {
+            mcpServer.authorization_token = tokens.access_token;
+          }
         }
       }
 

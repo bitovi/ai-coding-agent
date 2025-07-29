@@ -74,23 +74,37 @@ The application requires the following environment variables:
 
 - __DISABLE_AUTH__ - (Optional) Set to `true` to completely disable authentication for development/testing. When enabled, all requests will be processed without requiring login or tokens. **Warning: Only use in development environments!**
 
-- __MCP_SERVERS__ - either a JSON array or a path to a JSON file. The JSON should look like:
+- __MCP_SERVERS__ - either a JSON array or a path to a JSON file. Defines the MCP (Model Context Protocol) servers available to your prompts. The JSON should look like:
   ```json
   [
     {
         "name": "NAME OF SERVICE",
-        "type": "TYPE OF SERVICE", 
+        "type": "url", // or "stdio" for local subprocess servers
         "url": "URL TO MCP SERVICE",
-        "authorization_token": null // or a string authorization token
-        "tool_configuration": {},
-        "oauth_provider_configuration": OAuthProviderConfiguration
+        "authorization_token": null, // or a string authorization token
+        "tool_configuration": {
+            "enabled": true,
+            "allowed_tools": null, // or array of allowed tool names
+            "allowed_paths": ["/path/to/allowed/directory"] // for stdio type only
+        },
+        "oauth_provider_configuration": null // or OAuthProviderConfiguration object
     }
   ]
   ```
 
-  This is a superset of the `mcp_servers` option passed to `anthropic.beta.messages.create`. More information can be found about that SDK here: https://github.com/anthropics/anthropic-sdk-typescript
+  **Transport Types:**
+  - `"url"`: Network-based MCP servers (HTTP, SSE, WebSocket, etc.) 
+  - `"stdio"`: Local subprocess-based MCP servers via stdin/stdout
 
-  It supports an additional optional `oauth_provider_configuration`. See [OAuthProviderConfiguration](./specifications/oauth-provider-configuration.json) for more information.
+  **Authorization Token Priority:**
+  The system checks for authorization tokens in this priority order:
+  1. `authorization_token` field in the MCP server configuration
+  2. Environment variable: `MCP_{server_name}_authorization_token`
+  3. OAuth tokens obtained through the web interface
+
+  See the complete schema: [MCP Servers Configuration](./specifications/mcp-servers.json)
+
+  Additional OAuth configuration: [OAuth Provider Configuration](./specifications/oauth-provider-configuration.json)
 
 - __PROMPTS__ - either a json array or a path to a JSON file. The JSON should look like:
   ```json
@@ -123,7 +137,7 @@ You can configure MCP servers in several ways:
 
 **Option 1: Inline JSON in environment variable**
 ```bash
-MCP_SERVERS='[{"name":"jira","type":"sse","url":"https://mcp.atlassian.com/v1/sse","authorization_token":null,"tool_configuration":{"enabled":true}}]'
+MCP_SERVERS='[{"name":"jira","type":"url","url":"https://mcp.atlassian.com/v1/sse","authorization_token":null,"tool_configuration":{"enabled":true}}]'
 ```
 
 **Option 2: External JSON file**
@@ -132,6 +146,49 @@ MCP_SERVERS=./examples/mcp-servers.json
 ```
 
 See [examples/mcp-servers.json](./examples/mcp-servers.json) for a complete example with OAuth configuration.
+
+### Understanding MCP Transport Types
+
+The AI Coding Agent supports two main transport types for MCP servers:
+
+- **`"url"`**: For network-based MCP servers
+  - Standard HTTP requests and responses
+  - Server-Sent Events (SSE) streaming
+  - WebSocket connections
+  - Any HTTP-based communication protocol
+  - Examples: Jira MCP, GitHub Copilot MCP, external API services
+
+- **`"stdio"`**: For local subprocess-based MCP servers  
+  - Communication via standard input/output streams
+  - Server runs as a child process
+  - Suitable for local file operations, system tools
+  - Examples: Local file system access, command-line tools
+
+### Authorization Token Configuration
+
+You can provide authorization tokens for MCP servers in several ways:
+
+**Method 1: Environment Variables (Recommended)**
+```bash
+# In your .env file
+MCP_github_authorization_token=ghp_your_github_token_here
+MCP_jira_authorization_token=your_jira_token_here
+```
+
+**Method 2: Configuration File**
+```json
+{
+  "name": "github",
+  "type": "http",
+  "url": "https://api.githubcopilot.com/mcp/",
+  "authorization_token": "ghp_your_github_token_here"
+}
+```
+
+**Method 3: OAuth Flow**
+Use the web interface to authorize services through OAuth flows.
+
+**Priority Order**: Environment variables override configuration file tokens, which override OAuth tokens.
 
 ### Prompts Configuration
 

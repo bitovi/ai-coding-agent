@@ -239,7 +239,19 @@ class AICodingAgent {
           // Check if all required MCP servers are authorized
           const unauthorizedServers = [];
           for (const mcpServerName of prompt.mcp_servers) {
-            if (!this.authManager.isAuthorized(mcpServerName)) {
+            const mcpServer = this.configManager.getMcpServer(mcpServerName);
+            
+            // Check authorization in priority order:
+            // 1. Pre-configured authorization_token in config
+            // 2. Environment variable: MCP_{name}_authorization_token
+            // 3. OAuth tokens from AuthManager
+            const hasConfigToken = mcpServer && mcpServer.authorization_token;
+            const envTokenKey = `MCP_${mcpServerName}_authorization_token`;
+            const hasEnvToken = process.env[envTokenKey];
+            const hasOAuthToken = this.authManager.isAuthorized(mcpServerName);
+            
+            const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
+            if (!isAuthorized) {
               unauthorizedServers.push(mcpServerName);
             }
           }
