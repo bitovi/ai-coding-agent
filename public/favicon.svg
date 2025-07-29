@@ -1,0 +1,8 @@
+<!-- Simple SVG favicon for AI Coding Agent -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <circle cx="32" cy="32" r="30" fill="#3498db"/>
+  <circle cx="24" cy="24" r="4" fill="white"/>
+  <circle cx="40" cy="24" r="4" fill="white"/>
+  <path d="M20 40 Q32 50 44 40" stroke="white" stroke-width="3" fill="none"/>
+  <rect x="28" y="12" width="8" height="4" rx="2" fill="white"/>
+</svg>

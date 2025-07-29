@@ -1,0 +1,52 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"install"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Start Development Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": true
+		},
+		{
+			"label": "Validate Configuration",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"validate"
+			],
+			"group": "test",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Test Connections",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"test-connections"
+			],
+			"group": "test",
+			"problemMatcher": [],
+			"isBackground": false
+		}
+	]
+}

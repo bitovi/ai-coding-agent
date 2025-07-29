@@ -1,17 +1,79 @@
-# ai-coding-agent
+# AI Coding Agent
 
+This is an AI coding agent that runs Claude with MCP (Model Context Protocol) service integration. It provides a web interface for managing prompts and MCP service connections, handling OAuth authorization flows, and executing Claude prompts with access to external tools and data sources.
 
-This is an AI coding agent that runs Claude Code while providing it 
-access tokens for MCP services.
+## Features
+
+- 🤖 **Claude Integration**: Execute prompts using Claude 3.5 Sonnet with MCP servers
+- 🔐 **OAuth Management**: Automatic OAuth 2.0/PKCE flow handling for MCP services
+- 🔑 **Magic Link Authentication**: Secure, passwordless email-based login system
+- 📋 **Prompt Management**: Configure and execute parameterized prompts
+- 🌐 **Web Dashboard**: Beautiful, secure web interface for managing connections and prompts
+- 📧 **Email Notifications**: Get notified when authorization is needed or for login links
+- 🔄 **Streaming Responses**: Real-time streaming of Claude responses via Server-Sent Events
+- 📊 **Activity Tracking**: View execution history and results
+- 🛡️ **Secure Sessions**: HTTP-only cookies with automatic session management
+
+## Quick Start
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Start the server**:
+   ```bash
+   npm start
+   ```
+
+4. **Open the dashboard**:
+   Navigate to `http://localhost:3000`
+
+## Architecture Overview
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Web Dashboard │    │  OAuth Provider  │    │   MCP Services  │
+│                 │    │   (e.g. Jira)    │    │  (Jira, GitHub) │
+└─────────┬───────┘    └─────────┬────────┘    └─────────┬───────┘
+          │                      │                       │
+          ▼                      ▼                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    AI Coding Agent                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Config    │  │    Auth     │  │   Prompt    │             │
+│  │  Manager    │  │  Manager    │  │  Manager    │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│                           │                                     │
+│                           ▼                                     │
+│                  ┌─────────────────┐                           │
+│                  │ Claude Service  │                           │
+│                  │   (Anthropic)   │                           │
+│                  └─────────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Environment Variables
 
-It takes the following environment variables:
+The application requires the following environment variables:
 
 - __EMAIL__ - An email for the current user. Example:
   ```
   austin@bitovi.com
   ```
+
+- __ANTHROPIC_API_KEY__ - Your Anthropic API key for Claude access. Get one from [Anthropic Console](https://console.anthropic.com/).
+
+- __ACCESS_TOKEN__ - (Optional) A token that protects all API endpoints. If not provided, the API will be unprotected.
+
+- __DISABLE_AUTH__ - (Optional) Set to `true` to completely disable authentication for development/testing. When enabled, all requests will be processed without requiring login or tokens. **Warning: Only use in development environments!**
+
 - __MCP_SERVERS__ - either a JSON array or a path to a JSON file. The JSON should look like:
   ```json
   [
@@ -53,14 +115,289 @@ It takes the following environment variables:
   The parameters let people specify what parameters the prompt takes. When a prompt is called, arguments can be provided which will be substituted into the `messages.content`.
   See [Parameters Specification](./specifications/parameters.json) for more information.
 
-- `ACCESS_TOKEN` a token that is used to match all incoming requests.
-  
+## Configuration Examples
+
+### MCP Servers Configuration
+
+You can configure MCP servers in several ways:
+
+**Option 1: Inline JSON in environment variable**
+```bash
+MCP_SERVERS='[{"name":"jira","type":"sse","url":"https://mcp.atlassian.com/v1/sse","authorization_token":null,"tool_configuration":{"enabled":true}}]'
+```
+
+**Option 2: External JSON file**
+```bash
+MCP_SERVERS=./examples/mcp-servers.json
+```
+
+See [examples/mcp-servers.json](./examples/mcp-servers.json) for a complete example with OAuth configuration.
+
+### Prompts Configuration
+
+**Option 1: Inline JSON in environment variable**
+```bash
+PROMPTS='[{"name":"create-jira-issue","mcp_servers":["jira"],"messages":[{"role":"user","content":"Create a Jira issue with summary {{summary}}","parameters":{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}}]}]'
+```
+
+**Option 2: External JSON file**
+```bash
+PROMPTS=./examples/prompts.json
+```
+
+See [examples/prompts.json](./examples/prompts.json) for complete examples with parameter substitution.
+
+## Usage Guide
+
+### 1. Setting Up Your Environment
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual configuration:
+   - Add your email address
+   - Add your Anthropic API key
+   - Configure your MCP servers
+   - Configure your prompts
+
+3. Validate your configuration:
+   ```bash
+   npm run validate
+   ```
+
+### 2. Starting the Server
+
+Start the development server:
+```bash
+npm run dev
+```
+
+Or start the production server:
+```bash
+npm start
+```
+
+### 3. Using the Web Dashboard
+
+Navigate to `http://localhost:3000` to access the dashboard where you can:
+
+- **View Your Prompts**: See all configured prompts and their authorization status
+- **Manage Connections**: Authorize MCP services using OAuth flows
+- **View Activity**: Check execution history and results
+- **Run Prompts**: Execute prompts with parameter inputs
+
+### 4. API Endpoints
+
+All endpoints require authentication if `ACCESS_TOKEN` is configured.
+
+#### `GET /`
+The main dashboard interface.
+
+#### `POST /mcp/{MCP_NAME}/authorize`
+Initiates OAuth authorization for an MCP service.
+
+**Response:**
+```json
+{
+  "authUrl": "https://oauth-provider.com/authorize?..."
+}
+```
+
+#### `POST /prompt/{PROMPT_NAME}/run`
+Executes a prompt with streaming SSE response.
+
+**Request Body:**
+```json
+{
+  "parameters": {
+    "summary": "Fix login bug",
+    "description": "User cannot log in with valid credentials"
+  }
+}
+```
+
+**Response:** Server-Sent Events stream with Claude's response.
+
+#### `GET /prompts/{PROMPT_NAME}/activity.html`
+View execution history for a specific prompt.
+
+## Development
+
+### Project Structure
+
+```
+/
+├── index.js                 # Main application entry point
+├── src/
+│   ├── auth/
+│   │   └── AuthManager.js   # OAuth flow management
+│   ├── config/
+│   │   └── ConfigManager.js # Configuration loading & validation
+│   ├── middleware/
+│   │   └── AuthMiddleware.js # API authentication
+│   ├── prompts/
+│   │   └── PromptManager.js # Prompt management & execution
+│   └── services/
+│       ├── ClaudeService.js # Claude API integration
+│       ├── EmailService.js  # Email notifications
+│       └── WebUIService.js  # Web interface rendering
+├── examples/               # Example configurations
+├── scripts/               # Utility scripts
+└── specifications/        # JSON schemas
+```
+
+### Available Scripts
+
+- `npm start` - Start production server
+- `npm run dev` - Start development server with auto-reload
+- `npm run validate` - Validate configuration
+- `npm run test-connections` - Test MCP server connections
+
+### VS Code Tasks
+
+Use `Cmd+Shift+P` → "Tasks: Run Task" to access:
+
+- **Install Dependencies** - Run `npm install`
+- **Start Development Server** - Start with auto-reload
+- **Validate Configuration** - Check environment setup
+- **Test Connections** - Test MCP server connectivity
 ## Important Context
 
-The following URL should be injested to understand how things work:
+The following resources provide essential background information:
 
-- https://docs.anthropic.com/en/docs/claude-code/mcp
-- https://raw.githubusercontent.com/bitovi/claude-experiments/refs/heads/main/get-pkce-token.js
+- [Claude Code MCP Documentation](https://docs.anthropic.com/en/docs/claude-code/mcp) - Official MCP integration guide
+- [get-pkce-token.js](https://raw.githubusercontent.com/bitovi/claude-experiments/refs/heads/main/get-pkce-token.js) - OAuth PKCE implementation reference
+- [example-official-jira-mcp-with-pkce-token.js](https://raw.githubusercontent.com/bitovi/claude-experiments/refs/heads/main/example-official-jira-mcp-with-pkce-token.js) - Claude MCP integration example
+
+## OAuth Authorization Flow
+
+The application supports two OAuth configuration methods:
+
+### 1. Explicit OAuth Configuration
+
+When `oauth_provider_configuration` is provided in MCP server config:
+
+```json
+{
+  "name": "github",
+  "type": "sse",
+  "url": "https://api.github.com/mcp/sse",
+  "oauth_provider_configuration": {
+    "provider": "GitHub",
+    "issuer": "https://github.com",
+    "authorization_endpoint": "https://github.com/login/oauth/authorize",
+    "token_endpoint": "https://github.com/login/oauth/access_token",
+    "client_id": "your_client_id",
+    "client_type": "public",
+    "scopes_supported": ["repo", "user"]
+  }
+}
+```
+
+### 2. Endpoint Discovery
+
+When no `oauth_provider_configuration` is provided, the system automatically discovers OAuth endpoints using:
+
+1. WWW-Authenticate header resource parameter (RFC9728)
+2. Standard OAuth Authorization Server Metadata endpoint
+3. OpenID Connect Discovery endpoint
+
+This follows the same discovery logic as the reference implementation.
+
+## Error Handling & Notifications
+
+### Authorization Required Flow
+
+When a prompt requires unauthorized MCP services:
+
+1. **Prompt is queued** for later execution
+2. **Email notification** is sent to the configured email address
+3. **Error response** is returned with unauthorized services list
+4. **User can authorize** services via the web dashboard
+5. **Queued prompts** can be executed once authorization is complete
+
+### Email Configuration
+
+Configure SMTP settings for notifications:
+
+```bash
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+EMAIL_USER=your.email@gmail.com
+EMAIL_PASS=your_app_password
+EMAIL_FROM=AI Coding Agent <your.email@gmail.com>
+```
+
+If email is not configured, notifications will be logged to the console.
+
+## Security Considerations
+
+- **Access Token**: Use `ACCESS_TOKEN` to protect your API in production
+- **OAuth Tokens**: Stored in memory only (consider persistent storage for production)
+- **PKCE Flow**: Uses PKCE for secure OAuth without client secrets
+- **Token Refresh**: Automatic token refresh is planned but not yet implemented
+
+## Troubleshooting
+
+### Common Issues
+
+**1. "ANTHROPIC_API_KEY not found"**
+- Ensure your `.env` file contains a valid Anthropic API key
+- Get one from [Anthropic Console](https://console.anthropic.com/)
+
+**2. "Failed to load MCP servers"**
+- Check JSON syntax in your MCP_SERVERS configuration
+- Validate against examples in `examples/mcp-servers.json`
+
+**3. "OAuth Authorization Server Metadata not found"**
+- Ensure MCP service URL is correct and accessible
+- Check if service supports OAuth discovery endpoints
+
+**4. "Token exchange failed"**
+- Verify OAuth client configuration
+- Check redirect URI matches your server URL
+
+### Debug Commands
+
+```bash
+# Validate all configuration
+npm run validate
+
+# Test MCP server connections  
+npm run test-connections
+
+# Check server logs
+npm run dev
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support and questions:
+
+- Create an issue on [GitHub](https://github.com/bitovi/ai-coding-agent/issues)
+- Check the [troubleshooting section](#troubleshooting)
+- Review the [examples](./examples/) directory
+
+---
+
+## Original Specification Reference
+
+The implementation below follows the original specification from the repository README:
 
 ## Endpoints
 

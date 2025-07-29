@@ -1,0 +1,104 @@
+[
+  {
+    "name": "create-jira-issue",
+    "mcp_servers": ["jira"],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Create a Jira issue in the project '{{projectKey}}' with summary '{{summary}}' and description '{{description}}'. Use issue type '{{issueType}}' if specified, otherwise use 'Task'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string",
+              "description": "Brief summary of the issue"
+            },
+            "description": {
+              "type": "string", 
+              "description": "Detailed description of the issue"
+            },
+            "issueType": {
+              "type": "string",
+              "description": "Type of issue (Task, Bug, Story, etc.)",
+              "default": "Task"
+            },
+            "projectKey": {
+              "type": "string",
+              "description": "Project key for the Jira project"
+            }
+          },
+          "required": ["summary", "description", "projectKey"]
+        }
+      }
+    ]
+  },
+  {
+    "name": "analyze-repository",
+    "mcp_servers": ["github"],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Analyze the GitHub repository '{{repository}}' and provide insights about its structure, recent activity, and potential improvements.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Repository name in format 'owner/repo'"
+            }
+          },
+          "required": ["repository"]
+        }
+      }
+    ]
+  },
+  {
+    "name": "code-review",
+    "mcp_servers": ["github", "local-files"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are an expert code reviewer. Analyze the provided code and give constructive feedback."
+      },
+      {
+        "role": "user",
+        "content": "Please review the code in {{filePath}} and provide feedback on code quality, potential issues, and suggested improvements.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Path to the file to review"
+            }
+          },
+          "required": ["filePath"]
+        }
+      }
+    ]
+  },
+  {
+    "name": "project-status-report",
+    "mcp_servers": ["jira", "github"],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate a project status report for {{projectKey}}. Include information from both Jira issues and GitHub repository activity. Focus on progress over the last {{timeframe}} days.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "projectKey": {
+              "type": "string",
+              "description": "Jira project key or GitHub repository"
+            },
+            "timeframe": {
+              "type": "number",
+              "description": "Number of days to look back",
+              "default": 7
+            }
+          },
+          "required": ["projectKey"]
+        }
+      }
+    ]
+  }
+]

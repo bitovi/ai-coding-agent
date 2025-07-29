@@ -1,0 +1,31 @@
+[
+  {
+    "name": "jira",
+    "type": "sse",
+    "url": "https://mcp.atlassian.com/v1/sse",
+    "authorization_token": null,
+    "tool_configuration": {
+      "enabled": true
+    },
+    "oauth_provider_configuration": null
+  },
+  {
+    "name": "github",
+    "type": "http", 
+    "url": "https://api.githubcopilot.com/mcp/",
+    "authorization_token": null,
+    "tool_configuration": {
+      "enabled": true
+    }
+  },
+  {
+    "name": "local-files",
+    "type": "stdio",
+    "url": "file://localhost",
+    "authorization_token": "local_access_token",
+    "tool_configuration": {
+      "enabled": true,
+      "allowed_paths": ["/Users/username/projects"]
+    }
+  }
+]

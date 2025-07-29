@@ -1,3 +1,9 @@
+# Environment and secrets
+.env
+.env.local
+.env.production
+.env.staging
+
 # Logs
 logs
 *.log
