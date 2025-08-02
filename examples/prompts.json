@@ -48,7 +48,7 @@
     ]
   },
   {
-     "name": "clone-github-repository",
+    "name": "clone-github-repository",
     "mcp_servers": [],
         "messages": [
         {

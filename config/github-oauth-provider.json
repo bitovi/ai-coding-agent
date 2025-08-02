@@ -1,0 +1,53 @@
+{
+  "provider": "GitHub",
+  "issuer": "https://github.com",
+  "authorization_endpoint": "https://github.com/login/oauth/authorize",
+  "token_endpoint": "https://github.com/login/oauth/access_token",
+  "userinfo_endpoint": "https://api.github.com/user",
+  "device_authorization_endpoint": "https://github.com/login/device/code",
+  "client_id": "${GITHUB_CLIENT_ID}",
+  "client_secret": "${GITHUB_CLIENT_SECRET}",
+  "client_type": "confidential",
+  "scopes_supported": [
+    "repo",
+    "user",
+    "user:email", 
+    "read:org",
+    "write:org",
+    "admin:org",
+    "public_repo",
+    "repo:status",
+    "repo_deployment",
+    "read:repo_hook",
+    "write:repo_hook",
+    "admin:repo_hook",
+    "read:public_key",
+    "write:public_key",
+    "admin:public_key",
+    "gist",
+    "notifications",
+    "read:user",
+    "user:follow",
+    "delete_repo"
+  ],
+  "default_scopes": [
+    "repo",
+    "user:email",
+    "read:org"
+  ],
+  "response_types_supported": ["code"],
+  "grant_types_supported": [
+    "authorization_code",
+    "urn:ietf:params:oauth:grant-type:device_code"
+  ],
+  "code_challenge_methods_supported": ["S256"],
+  "supports_pkce": true,
+  "supports_device_flow": true,
+  "token_endpoint_auth_methods_supported": ["client_secret_post"],
+  "redirect_uris": [
+    "http://localhost:3000/oauth/github/callback",
+    "http://127.0.0.1:3000/oauth/github/callback"
+  ],
+  "description": "GitHub OAuth provider configuration for Git repository access",
+  "documentation_url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"
+}
