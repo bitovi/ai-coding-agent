@@ -52,10 +52,54 @@
         "type": ["object", "null"],
         "description": "OAuth configuration for servers requiring OAuth authentication. If null, OAuth discovery will be attempted.",
         "$ref": "oauth-provider-configuration.json"
+      },
+      "command": {
+        "type": "string",
+        "description": "Command to run for stdio servers (e.g., 'npx', 'node', 'python')"
+      },
+      "args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Arguments to pass to the command for stdio servers"
+      },
+      "env": {
+        "type": "object",
+        "description": "Environment variables to set for stdio servers",
+        "additionalProperties": {
+          "type": "string"
+        }
       }
     },
-    "required": ["name", "type", "url"],
-    "additionalProperties": false
+    "required": ["name", "type"],
+    "additionalProperties": false,
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "type": {
+              "const": "url"
+            }
+          }
+        },
+        "then": {
+          "required": ["url"]
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "type": {
+              "const": "stdio"
+            }
+          }
+        },
+        "then": {
+          "required": ["command"]
+        }
+      }
+    ]
   },
   "examples": [
     {

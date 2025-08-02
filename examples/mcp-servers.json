@@ -21,7 +21,8 @@
   {
     "name": "local-files",
     "type": "stdio",
-    "url": "file://localhost",
+    "command": "mcp-server-local-files",
+    "args": [],
     "authorization_token": "local_access_token",
     "tool_configuration": {
       "enabled": true,

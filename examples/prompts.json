@@ -1,5 +1,20 @@
 [
   {
+    "name": "hello-world",
+    "mcp_servers": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello Claude! Please respond with a friendly greeting and tell me you're working correctly.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    ]
+  },
+  {
     "name": "create-jira-issue",
     "mcp_servers": ["jira"],
     "messages": [
@@ -31,6 +46,26 @@
         }
       }
     ]
+  },
+  {
+     "name": "clone-github-repository",
+    "mcp_servers": [],
+        "messages": [
+        {
+            "role": "user",
+            "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "repository": {
+                        "type": "string",
+                        "description": "Repository URL or name in format 'owner/repo'. Example: 'bitovi/bitovi-jira-redirect'."
+                    }
+                },
+                "required": ["repository"]
+            }
+        }
+        ]
   },
   {
     "name": "analyze-repository",
@@ -97,6 +132,26 @@
             }
           },
           "required": ["projectKey"]
+        }
+      }
+    ]
+  },
+  {
+    "name": "git-status-and-commit",
+    "mcp_servers": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check the git status of the current repository and commit any staged changes with the message '{{commitMessage}}'. If no changes are staged, stage all modified files first. Use the built-in git tools available in the workspace.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "commitMessage": {
+              "type": "string",
+              "description": "Message for the git commit"
+            }
+          },
+          "required": ["commitMessage"]
         }
       }
     ]

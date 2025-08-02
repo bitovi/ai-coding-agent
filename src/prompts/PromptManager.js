@@ -1,5 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { isServerAuthorized } from '../auth/authUtils.js';
 
 /**
  * Manages prompts and their execution history
@@ -190,16 +191,17 @@ export class PromptManager {
   /**
    * Get prompts that are ready to execute (all MCP servers authorized)
    */
-  getReadyPrompts(authManager) {
+  getReadyPrompts(authManager, configManager) {
     const readyPrompts = [];
     
     for (const pending of this.pendingPrompts) {
       const prompt = this.getPrompt(pending.promptName);
       if (!prompt) continue;
       
-      const allAuthorized = prompt.mcp_servers.every(
-        serverName => authManager.isAuthorized(serverName)
-      );
+      const allAuthorized = prompt.mcp_servers.every(serverName => {
+        const server = configManager.getMcpServer(serverName);
+        return isServerAuthorized(serverName, server, authManager);
+      });
       
       if (allAuthorized) {
         readyPrompts.push(pending);

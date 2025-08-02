@@ -56,11 +56,24 @@ export class ConfigManager {
   }
 
   validateMcpServer(server) {
-    const required = ['name', 'type', 'url'];
+    const required = ['name', 'type'];
     for (const field of required) {
       if (!server[field]) {
         throw new Error(`MCP server missing required field: ${field}`);
       }
+    }
+
+    // Type-specific validation
+    if (server.type === 'url') {
+      if (!server.url) {
+        throw new Error(`URL-type MCP server missing required field: url`);
+      }
+    } else if (server.type === 'stdio') {
+      if (!server.command) {
+        throw new Error(`STDIO-type MCP server missing required field: command`);
+      }
+    } else {
+      throw new Error(`Invalid MCP server type: ${server.type}. Must be 'url' or 'stdio'`);
     }
 
     // Validate oauth_provider_configuration if present
@@ -115,11 +128,27 @@ export class ConfigManager {
       }
 
       const mcpServer = {
-        type: "url", // Always send "url" to Claude for all MCP servers
-        url: server.url,
+        type: server.type, // Use the actual server type (url or stdio)
         name: server.name,
         tool_configuration: server.tool_configuration || { enabled: true }
       };
+
+      // Add type-specific fields
+      if (server.type === 'stdio') {
+        // For STDIO servers, include command, args, and env
+        if (server.command) {
+          mcpServer.command = server.command;
+        }
+        if (server.args) {
+          mcpServer.args = server.args;
+        }
+        if (server.env) {
+          mcpServer.env = server.env;
+        }
+      } else {
+        // For URL servers, include the URL
+        mcpServer.url = server.url;
+      }
 
       // Add authorization token
       if (server.authorization_token) {

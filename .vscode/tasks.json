@@ -47,6 +47,18 @@
 			"group": "test",
 			"problemMatcher": [],
 			"isBackground": false
+		},
+		{
+			"label": "Test Git Credentials",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"test-git"
+			],
+			"group": "test",
+			"problemMatcher": [],
+			"isBackground": false
 		}
 	]
 }

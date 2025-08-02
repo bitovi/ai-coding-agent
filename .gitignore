@@ -143,3 +143,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local development repositories
+repositories/
+shared-repos/
+git-repos/
+local-repos/

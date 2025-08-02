@@ -14,8 +14,9 @@ import { fileURLToPath } from 'url';
 import { ConfigManager } from './src/config/ConfigManager.js';
 import { AuthManager } from './src/auth/AuthManager.js';
 import { AuthService } from './src/auth/AuthService.js';
+import { isServerAuthorized } from './src/auth/authUtils.js';
 import { PromptManager } from './src/prompts/PromptManager.js';
-import { ClaudeService } from './src/services/ClaudeService.js';
+import { ClaudeServiceFactory } from './src/services/ClaudeServiceFactory.js';
 import { EmailService } from './src/services/EmailService.js';
 import { WebUIService } from './src/services/WebUIService.js';
 import { ExecutionHistoryService } from './src/services/ExecutionHistoryService.js';
@@ -38,7 +39,7 @@ class AICodingAgent {
     this.authManager = new AuthManager();
     this.promptManager = new PromptManager();
     this.executionHistoryService = new ExecutionHistoryService();
-    this.claudeService = new ClaudeService(this.executionHistoryService);
+    this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
     this.emailService = new EmailService();
     this.authService = new AuthService(this.emailService);
     this.webUIService = new WebUIService();
@@ -55,6 +56,24 @@ class AICodingAgent {
 
   async initialize() {
     try {
+      // Validate Claude service configuration
+      const serviceValidation = await ClaudeServiceFactory.validateConfiguration();
+      console.log(`🔧 Claude Service: ${serviceValidation.serviceType}`);
+      for (const message of serviceValidation.messages) {
+        console.log(`   ${message}`);
+      }
+      
+      if (!serviceValidation.isValid) {
+        console.error('❌ Claude service configuration is invalid');
+        const instructions = ClaudeServiceFactory.getConfigurationInstructions();
+        console.log('\\n📖 Configuration Instructions:');
+        console.log(`   ${instructions.title}`);
+        for (const instruction of instructions.instructions) {
+          console.log(`   ${instruction}`);
+        }
+        process.exit(1);
+      }
+      
       // Load configurations
       await this.configManager.loadConfigurations();
       await this.promptManager.loadPrompts();
@@ -241,16 +260,8 @@ class AICodingAgent {
           for (const mcpServerName of prompt.mcp_servers) {
             const mcpServer = this.configManager.getMcpServer(mcpServerName);
             
-            // Check authorization in priority order:
-            // 1. Pre-configured authorization_token in config
-            // 2. Environment variable: MCP_{name}_authorization_token
-            // 3. OAuth tokens from AuthManager
-            const hasConfigToken = mcpServer && mcpServer.authorization_token;
-            const envTokenKey = `MCP_${mcpServerName}_authorization_token`;
-            const hasEnvToken = process.env[envTokenKey];
-            const hasOAuthToken = this.authManager.isAuthorized(mcpServerName);
-            
-            const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
+            // Use the new authUtils function that includes custom credential validation
+            const isAuthorized = isServerAuthorized(mcpServerName, mcpServer, this.authManager);
             if (!isAuthorized) {
               unauthorizedServers.push(mcpServerName);
             }
@@ -331,6 +342,111 @@ class AICodingAgent {
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    });
+
+    // Claude service management endpoints
+    this.app.get('/api/claude/service', (req, res) => {
+      const serviceType = ClaudeServiceFactory.getServiceType();
+      const capabilities = ClaudeServiceFactory.getServiceCapabilities();
+      
+      res.json({
+        currentService: serviceType,
+        capabilities: capabilities[serviceType],
+        allCapabilities: capabilities
+      });
+    });
+
+    this.app.post('/api/claude/service/validate', async (req, res) => {
+      try {
+        const validation = await ClaudeServiceFactory.validateConfiguration();
+        res.json(validation);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/claude/service/switch', async (req, res) => {
+      try {
+        const { serviceType } = req.body;
+        
+        if (!serviceType || !['claude-sdk', 'claude-code'].includes(serviceType)) {
+          return res.status(400).json({ 
+            error: 'Invalid service type. Must be "claude-sdk" or "claude-code"' 
+          });
+        }
+
+        const result = await ClaudeServiceFactory.switchServiceType(serviceType);
+        
+        if (result.success) {
+          // Recreate the service instance
+          this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
+          console.log(`🔄 Switched Claude service to: ${serviceType}`);
+        }
+        
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/claude/service/instructions', (req, res) => {
+      const instructions = ClaudeServiceFactory.getConfigurationInstructions();
+      res.json(instructions);
+    });
+
+    // Claude Code specific endpoints (only available when using Claude Code)
+    this.app.get('/api/claude/mcp/servers', async (req, res) => {
+      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
+        return res.status(400).json({ 
+          error: 'MCP server management only available with Claude Code service' 
+        });
+      }
+
+      try {
+        const servers = await this.claudeService.listMcpServers();
+        res.json({ servers: servers.split('\n').filter(s => s.trim()) });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/claude/mcp/servers', async (req, res) => {
+      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
+        return res.status(400).json({ 
+          error: 'MCP server management only available with Claude Code service' 
+        });
+      }
+
+      try {
+        const { name, config, scope = 'local' } = req.body;
+        
+        if (!name || !config) {
+          return res.status(400).json({ 
+            error: 'Server name and config are required' 
+          });
+        }
+
+        const result = await this.claudeService.addMcpServer(name, config, scope);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/claude/mcp/servers/:name', async (req, res) => {
+      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
+        return res.status(400).json({ 
+          error: 'MCP server management only available with Claude Code service' 
+        });
+      }
+
+      try {
+        const { name } = req.params;
+        const result = await this.claudeService.removeMcpServer(name);
+        res.json({ success: true, output: result });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
   }
 

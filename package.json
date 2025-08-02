@@ -11,6 +11,13 @@
     "start-no-auth": "DISABLE_AUTH=true node index.js",
     "validate": "node scripts/validate-config.js",
     "test-connections": "node scripts/test-connections.js",
+    "test-git": "node scripts/test-git-credentials.js",
+    "test-claude-code": "node tests/test-claude-code-basic.js",
+    "test-claude-integration": "node tests/test-claude-service-integration.js",
+    "start-claude-code": "CLAUDE_SERVICE=CLAUDECODE node index.js",
+    "dev-claude-code": "CLAUDE_SERVICE=CLAUDECODE node --watch index.js",
+    "start-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node index.js",
+    "dev-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node --watch index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -29,7 +36,9 @@
   },
   "homepage": "https://github.com/bitovi/ai-coding-agent#readme",
   "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.64",
     "@anthropic-ai/sdk": "^0.30.1",
+    "@cyanheads/git-mcp-server": "^2.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "fs-extra": "^11.2.0",

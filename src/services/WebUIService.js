@@ -1,4 +1,5 @@
 import path from 'path';
+import { isServerAuthorized } from '../auth/authUtils.js';
 
 /**
  * Service for rendering web UI pages
@@ -145,16 +146,7 @@ export class WebUIService {
       const mcpServerStatuses = prompt.mcp_servers.map(serverName => {
         const server = serverMap.get(serverName);
         
-        // Check authorization in priority order:
-        // 1. Pre-configured authorization_token in config
-        // 2. Environment variable: MCP_{name}_authorization_token  
-        // 3. OAuth tokens from AuthManager
-        const hasConfigToken = server && server.authorization_token;
-        const envTokenKey = `MCP_${serverName}_authorization_token`;
-        const hasEnvToken = process.env[envTokenKey];
-        const hasOAuthToken = authManager.isAuthorized(serverName);
-        
-        const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
+        const isAuthorized = isServerAuthorized(serverName, server, authManager);
         const statusClass = isAuthorized ? 'status-authorized' : 'status-unauthorized';
         return `
           <li>
@@ -166,14 +158,7 @@ export class WebUIService {
 
       const allAuthorized = prompt.mcp_servers.every(serverName => {
         const server = serverMap.get(serverName);
-        
-        // Same authorization check logic
-        const hasConfigToken = server && server.authorization_token;
-        const envTokenKey = `MCP_${serverName}_authorization_token`;
-        const hasEnvToken = process.env[envTokenKey];
-        const hasOAuthToken = authManager.isAuthorized(serverName);
-        
-        return hasConfigToken || hasEnvToken || hasOAuthToken;
+        return isServerAuthorized(serverName, server, authManager);
       });
 
       return `
@@ -217,16 +202,7 @@ export class WebUIService {
     }
 
     const connectionCards = mcpServers.map(server => {
-      // Check authorization in priority order:
-      // 1. Pre-configured authorization_token in config
-      // 2. Environment variable: MCP_{name}_authorization_token
-      // 3. OAuth tokens from AuthManager
-      const hasConfigToken = server.authorization_token;
-      const envTokenKey = `MCP_${server.name}_authorization_token`;
-      const hasEnvToken = process.env[envTokenKey];
-      const hasOAuthToken = authManager.isAuthorized(server.name);
-      
-      const isAuthorized = hasConfigToken || hasEnvToken || hasOAuthToken;
+      const isAuthorized = isServerAuthorized(server.name, server, authManager);
       const statusClass = isAuthorized ? 'status-authorized' : 'status-unauthorized';
       const statusText = isAuthorized ? 'Authorized' : 'Not Authorized';
 

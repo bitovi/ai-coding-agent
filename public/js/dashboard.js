@@ -6,6 +6,179 @@
 import { mergeParametersWithDefaults, processPrompt, getMissingRequiredParameters, validateParameters } from './prompt-utils.js';
 
 /**
+ * Event handlers for streaming execution events
+ * Maps event types to functions that return HTML content and handle UI updates
+ */
+const streamEventHandlers = {
+    'content_block_delta': (eventData, outputDiv) => {
+        if (eventData.delta && eventData.delta.text) {
+            outputDiv.innerHTML += eventData.delta.text;
+        }
+    },
+    
+    'status': (eventData, outputDiv) => {
+        outputDiv.innerHTML += `\n📊 Status: ${eventData.message}\n`;
+    },
+    
+    'system_init': (eventData, outputDiv) => {
+        outputDiv.innerHTML += `\n🏗️ System initialized\n`;
+        outputDiv.innerHTML += `   Working directory: ${eventData.cwd}\n`;
+        outputDiv.innerHTML += `   Model: ${eventData.model}\n`;
+        outputDiv.innerHTML += `   Available tools: ${eventData.tools ? eventData.tools.join(', ') : 'N/A'}\n`;
+    },
+    
+    'user_message': (eventData, outputDiv) => {
+        let message;
+        
+        // Handle the nested structure: eventData.message.content
+        if (eventData.message && eventData.message.content) {
+            if (Array.isArray(eventData.message.content)) {
+                // Handle array of tool results
+                const toolResults = eventData.message.content.map(item => {
+                    if (item.type === 'tool_result') {
+                        return `🔧 Tool Result (${item.tool_use_id}): ${item.content}`;
+                    }
+                    return JSON.stringify(item, null, 2);
+                }).join('\n   ');
+                message = toolResults;
+            } else {
+                message = eventData.message.content;
+            }
+        } else if (typeof eventData.message === 'object') {
+            // Handle other object structures
+            if (eventData.message === null) {
+                message = 'null';
+            } else if (Array.isArray(eventData.message)) {
+                message = `Array(${eventData.message.length}): ${JSON.stringify(eventData.message, null, 2)}`;
+            } else if (eventData.message.toString && eventData.message.toString() !== '[object Object]') {
+                message = eventData.message.toString();
+            } else {
+                message = JSON.stringify(eventData.message, null, 2);
+            }
+        } else {
+            message = eventData.message;
+        }
+        
+        outputDiv.innerHTML += `\n👤 User: ${message}\n`;
+    },
+    
+    'message_start': (eventData, outputDiv) => {
+        outputDiv.innerHTML += `\n🤖 Claude: `;
+    },
+    
+    'content_block_start': (eventData, outputDiv) => {
+        // Content block starting - typically no visual output needed
+        if (eventData.content_block && eventData.content_block.type === 'text') {
+            // Text content starting
+        }
+    },
+    
+    'mcp_tool_use': (eventData, outputDiv) => {
+        outputDiv.innerHTML += `\n\n🔧 Using tool: ${eventData.name}\n`;
+        if (eventData.input) {
+            // Special formatting for TodoWrite tool with todos array
+            if (eventData.name === 'TodoWrite' && eventData.input.todos && Array.isArray(eventData.input.todos)) {
+                outputDiv.innerHTML += `   Todos:\n`;
+                eventData.input.todos.forEach(todo => {
+                    const status = todo.status === 'completed' ? '✅' : '📋';
+                    const priority = todo.priority ? ` (${todo.priority})` : '';
+                    outputDiv.innerHTML += `     ${status} ${todo.content}${priority}\n`;
+                });
+            }
+            // Special formatting for Bash tool
+            else if (eventData.name === 'Bash' && eventData.input.command) {
+                const description = eventData.input.description ? ` - ${eventData.input.description}` : '';
+                outputDiv.innerHTML += `   Command: ${eventData.input.command}${description}\n`;
+            }
+            // Special formatting for LS tool
+            else if (eventData.name === 'LS' && eventData.input.path) {
+                outputDiv.innerHTML += `   Listing directory: ${eventData.input.path}\n`;
+            }
+            // Default JSON formatting for other tools
+            else {
+                outputDiv.innerHTML += `   Input: ${JSON.stringify(eventData.input, null, 2)}\n`;
+            }
+        }
+    },
+    
+    'result_success': (eventData, outputDiv, { stopButton, runButton, originalButtonText }) => {
+        outputDiv.innerHTML += `\n✅ Execution completed successfully!\n`;
+        outputDiv.innerHTML += `   Duration: ${eventData.duration}ms\n`;
+        outputDiv.innerHTML += `   Cost: $${eventData.cost}\n`;
+        outputDiv.innerHTML += `   Turns: ${eventData.turns}\n`;
+        stopButton.style.display = 'none';
+        runButton.innerHTML = originalButtonText;
+        runButton.disabled = false;
+        showMessage('Prompt execution completed!', 'success');
+        return { shouldReturn: true };
+    },
+    
+    'result_error': (eventData, outputDiv, { stopButton, runButton, originalButtonText }) => {
+        outputDiv.innerHTML += `\n❌ Execution failed: ${eventData.error}\n`;
+        outputDiv.innerHTML += `   Duration: ${eventData.duration}ms\n`;
+        stopButton.style.display = 'none';
+        runButton.innerHTML = originalButtonText;
+        runButton.disabled = false;
+        showMessage('Prompt execution failed!', 'error');
+        return { shouldReturn: true };
+    },
+    
+    'complete': (eventData, outputDiv, { stopButton, runButton, originalButtonText }) => {
+        if (eventData.message === 'Claude Code SDK execution completed') {
+            outputDiv.innerHTML += '\n🎉 All done!\n';
+            stopButton.style.display = 'none';
+            runButton.innerHTML = originalButtonText;
+            runButton.disabled = false;
+            showMessage('Prompt execution completed!', 'success');
+            return { shouldReturn: true };
+        }
+    },
+    
+    'error': (eventData, outputDiv) => {
+        const errorMsg = eventData.error || eventData.message || 'Unknown error';
+        outputDiv.innerHTML += `\n❌ Error: ${errorMsg}\n`;
+    },
+    
+    'unknown': (eventData, outputDiv) => {
+        outputDiv.innerHTML += `\n🔍 Debug: ${eventData.type} - ${JSON.stringify(eventData).substring(0, 200)}...\n`;
+    }
+};
+
+/**
+ * Process a streaming event using the appropriate handler
+ * @param {string} eventType - The type of event
+ * @param {Object} eventData - The event data
+ * @param {HTMLElement} outputDiv - The output div element
+ * @param {Object} context - Additional context (buttons, etc.)
+ * @returns {Object|undefined} - May return control flow information
+ */
+function processStreamEvent(eventType, eventData, outputDiv, context = {}) {
+    let result;
+    
+    // Handle specific event conditions first
+    if (eventType === 'error' || eventData.error) {
+        result = streamEventHandlers.error(eventData, outputDiv, context);
+    }
+    // Use specific handler if available
+    else if (streamEventHandlers[eventType]) {
+        result = streamEventHandlers[eventType](eventData, outputDiv, context);
+    }
+    // Handle ignored events
+    else if (['content_block_stop', 'message_stop'].includes(eventType)) {
+        return;
+    }
+    // Default: show debug info for unknown events
+    else {
+        outputDiv.innerHTML += `\n🔍 ${eventType}: ${JSON.stringify(eventData).substring(0, 100)}...\n`;
+    }
+    
+    // Auto-scroll to bottom after any content update
+    outputDiv.scrollTop = outputDiv.scrollHeight;
+    
+    return result;
+}
+
+/**
  * Initialize dashboard
  */
 document.addEventListener('DOMContentLoaded', function() {
@@ -292,46 +465,22 @@ function streamPromptExecution(promptName, parameters, outputDiv, stopButton, ru
                         try {
                             const eventData = JSON.parse(data);
                             
+                            // Show all events for debugging
+                            console.log(`🔍 [DEBUG] Event: ${currentEvent}`, eventData);
+                            
                             // Handle different SSE event types from Claude
-                            if (currentEvent === 'content_block_delta' && eventData.delta && eventData.delta.text) {
-                                // This is the actual text content from Claude
-                                outputDiv.innerHTML += eventData.delta.text;
-                                outputDiv.scrollTop = outputDiv.scrollHeight; // Auto-scroll
-                            } else if (currentEvent === 'status' && eventData.message === 'Starting prompt execution...') {
-                                // Initial status message - already shown in the UI
-                            } else if (currentEvent === 'complete' && eventData.message === 'Prompt execution completed') {
-                                // Completion message
-                                outputDiv.innerHTML += '\n✅ Execution completed.\n';
-                                stopButton.style.display = 'none';
-                                runButton.innerHTML = originalButtonText;
-                                runButton.disabled = false;
-                                showMessage('Prompt execution completed!', 'success');
-                                setTimeout(() => {
-                                    window.location.reload();
-                                }, 2000);
+                            const context = { stopButton, runButton, originalButtonText };
+                            const result = processStreamEvent(currentEvent, eventData, outputDiv, context);
+                            
+                            // Check if handler requested early return
+                            if (result && result.shouldReturn) {
                                 return;
-                            } else if (currentEvent === 'error' || eventData.error) {
-                                // Error event
-                                const errorMsg = eventData.error || eventData.message || 'Unknown error';
-                                outputDiv.innerHTML += `\n❌ Error: ${errorMsg}\n`;
-                                outputDiv.scrollTop = outputDiv.scrollHeight;
-                            } else if (currentEvent === 'mcp_tool_use' && eventData.server_name && eventData.name) {
-                                // MCP tool use event
-                                outputDiv.innerHTML += `\n🔧 Using tool: ${eventData.name} on ${eventData.server_name}\n`;
-                                outputDiv.scrollTop = outputDiv.scrollHeight;
-                            } else if (currentEvent === 'mcp_tool_result' && eventData.content) {
-                                // MCP tool result
-                                const resultText = Array.isArray(eventData.content) 
-                                    ? eventData.content.map(c => c.text || JSON.stringify(c)).join('\n')
-                                    : eventData.content;
-                                outputDiv.innerHTML += `📄 Tool result:\n${resultText}\n`;
-                                outputDiv.scrollTop = outputDiv.scrollHeight;
                             }
-                            // Ignore other event types like message_start, content_block_start, etc.
                             
                         } catch (e) {
                             // If not JSON, treat as plain text
                             outputDiv.innerHTML += data;
+                            // Let processStreamEvent handle scrolling
                             outputDiv.scrollTop = outputDiv.scrollHeight;
                         }
                     }
@@ -493,3 +642,6 @@ document.addEventListener('keydown', function(e) {
         }, 500);
     }
 });
+
+// Export for testing
+export { streamEventHandlers, processStreamEvent };
