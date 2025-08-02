@@ -50,7 +50,8 @@
   {
     "name": "clone-github-repository",
     "mcp_servers": [],
-        "messages": [
+    "connections": {"claude_code": ["git-credentials"]},
+    "messages": [
         {
             "role": "user",
             "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder.",

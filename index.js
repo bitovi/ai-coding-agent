@@ -229,6 +229,26 @@ class AICodingAgent {
       }
     );
 
+    // Environment connections setup endpoint
+    this.app.post('/connections/git-credentials/setup',
+      this.authMiddleware.authenticate.bind(this.authMiddleware),
+      async (req, res) => {
+        try {
+          const { token } = req.body;
+          
+          if (!token) {
+            return res.status(400).json({ error: 'Token is required' });
+          }
+          
+          await this.setupGitCredentials(token);
+          res.json({ success: true, message: 'Git credentials configured successfully' });
+        } catch (error) {
+          console.error('❌ Git credentials setup error:', error);
+          res.status(500).json({ error: error.message });
+        }
+      }
+    );
+
     // OAuth callback endpoint
     this.app.get('/oauth/callback', async (req, res) => {
       try {
@@ -448,6 +468,28 @@ class AICodingAgent {
         res.status(500).json({ error: error.message });
       }
     });
+  }
+
+  /**
+   * Setup git credentials for Claude Code operations
+   * @param {string} token - GitHub personal access token
+   */
+  async setupGitCredentials(token) {
+    const fs = await import('fs');
+    const os = await import('os');
+    
+    // Determine the appropriate home directory
+    const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
+    
+    // Create .git-credentials file
+    const gitCredentialsPath = path.join(homeDir, '.git-credentials');
+    const username = process.env.GIT_USERNAME || 'token';
+    const credentialsContent = `https://${username}:${token}@github.com\n`;
+    
+    // Write the credentials file
+    await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
+    
+    console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
   }
 
   async start() {

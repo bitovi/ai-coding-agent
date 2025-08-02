@@ -619,15 +619,55 @@ function hidePreview() {
     previewSection.style.display = 'none';
 }
 
+/**
+ * Setup git credentials for environment connections
+ */
+function setupGitCredentials() {
+    const token = prompt('Enter your GitHub Personal Access Token:');
+    if (!token) {
+        return;
+    }
+
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '🔄 Setting up...';
+    button.disabled = true;
+
+    fetch('/connections/git-credentials/setup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ token })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.message || 'Failed to setup git credentials');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        showMessage('✅ Git credentials configured successfully!', 'success');
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+    })
+    .catch(error => {
+        console.error('Setup error:', error);
+        showMessage('Failed to setup git credentials: ' + error.message, 'error');
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
 // Make functions available globally for onclick handlers
 window.logout = logout;
 window.authorizeService = authorizeService;
-window.runPrompt = runPrompt;
-window.runPromptWithParameters = runPromptWithParameters;
-window.stopExecution = stopExecution;
-window.clearOutput = clearOutput;
-window.previewPrompt = previewPrompt;
-window.hidePreview = hidePreview;
+window.setupGitCredentials = setupGitCredentials;
 
 /**
  * Handle keyboard shortcuts and other dashboard interactions

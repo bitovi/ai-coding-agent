@@ -1,5 +1,6 @@
 import path from 'path';
 import { isServerAuthorized } from '../auth/authUtils.js';
+import { isConnectionAvailable, getAllConnectionStatuses } from '../auth/connectionValidators.js';
 
 /**
  * Service for rendering web UI pages
@@ -156,10 +157,34 @@ export class WebUIService {
         `;
       }).join('');
 
-      const allAuthorized = prompt.mcp_servers.every(serverName => {
+      // Check connection requirements (new)
+      const connectionStatuses = [];
+      if (prompt.connections) {
+        for (const [environment, connectionTypes] of Object.entries(prompt.connections)) {
+          for (const connectionType of connectionTypes) {
+            const isAvailable = isConnectionAvailable(connectionType);
+            const statusClass = isAvailable ? 'status-authorized' : 'status-unauthorized';
+            connectionStatuses.push(`
+              <li>
+                <span class="status-indicator ${statusClass}"></span>
+                ${environment}: ${connectionType}
+              </li>
+            `);
+          }
+        }
+      }
+
+      const allMcpAuthorized = prompt.mcp_servers.every(serverName => {
         const server = serverMap.get(serverName);
         return isServerAuthorized(serverName, server, authManager);
       });
+
+      const allConnectionsAvailable = !prompt.connections || 
+        Object.values(prompt.connections).flat().every(connectionType => 
+          isConnectionAvailable(connectionType)
+        );
+
+      const allAuthorized = allMcpAuthorized && allConnectionsAvailable;
 
       return `
         <div class="card">
@@ -167,6 +192,7 @@ export class WebUIService {
           <p>${prompt.messages[0]?.content?.substring(0, 100) || 'No description'}...</p>
           <ul class="status-list">
             ${mcpServerStatuses}
+            ${connectionStatuses.join('')}
           </ul>
           <div class="button-group">
             <a href="/prompts/${encodeURIComponent(prompt.name)}/activity.html" class="btn btn-small">
@@ -192,16 +218,10 @@ export class WebUIService {
    * Render connections list
    */
   renderConnectionsList(mcpServers, authManager) {
-    if (mcpServers.length === 0) {
-      return `
-        <div class="empty-state">
-          <h3>No MCP servers configured</h3>
-          <p>Configure MCP servers in your MCP_SERVERS environment variable</p>
-        </div>
-      `;
-    }
-
-    const connectionCards = mcpServers.map(server => {
+    const connectionStatuses = getAllConnectionStatuses();
+    
+    // Create MCP server cards
+    const mcpCards = mcpServers.map(server => {
       const isAuthorized = isServerAuthorized(server.name, server, authManager);
       const statusClass = isAuthorized ? 'status-authorized' : 'status-unauthorized';
       const statusText = isAuthorized ? 'Authorized' : 'Not Authorized';
@@ -225,9 +245,46 @@ export class WebUIService {
           }
         </div>
       `;
-    }).join('');
+    });
 
-    return `<div class="grid">${connectionCards}</div>`;
+    // Create environment connection cards
+    const environmentCards = Object.entries(connectionStatuses).map(([connectionType, status]) => {
+      const statusClass = status.available ? 'status-authorized' : 'status-unauthorized';
+      const statusText = status.available ? 'Available' : 'Not Available';
+
+      return `
+        <div class="card">
+          <h3>${connectionType}</h3>
+          <p><strong>Type:</strong> Environment Connection</p>
+          <p><strong>Purpose:</strong> Required for git operations in Claude Code</p>
+          <div class="connection-status">
+            <span class="status-indicator ${statusClass}"></span>
+            <span>${statusText}</span>
+          </div>
+          ${!status.available ? 
+            `<button onclick="setupGitCredentials()" class="btn btn-success btn-small">
+              🔐 Setup
+            </button>` :
+            `<button class="btn btn-small btn-disabled" disabled>
+              ✅ Configured
+            </button>`
+          }
+        </div>
+      `;
+    });
+
+    const allCards = [...mcpCards, ...environmentCards];
+    
+    if (allCards.length === 0) {
+      return `
+        <div class="empty-state">
+          <h3>No connections configured</h3>
+          <p>Configure MCP servers and environment connections</p>
+        </div>
+      `;
+    }
+
+    return `<div class="grid">${allCards.join('')}</div>`;
   }
 
   /**
