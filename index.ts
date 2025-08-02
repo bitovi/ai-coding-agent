@@ -7,7 +7,7 @@
  * access tokens for MCP services.
  */
 
-import express from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -22,7 +22,7 @@ import { WebUIService } from './src/services/WebUIService.js';
 import { ExecutionHistoryService } from './src/services/ExecutionHistoryService.js';
 import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
 import { mergeParametersWithDefaults } from './public/js/prompt-utils.js';
-import { setupAllWebClientRoutes } from './src/services/web-client-services/index.ts';
+import { setupAllWebClientRoutes } from './src/services/web-client-services/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -31,9 +31,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 class AICodingAgent {
+  private app: Application;
+  private port: number;
+  private configManager: ConfigManager;
+  private authManager: AuthManager;
+  private promptManager: PromptManager;
+  private executionHistoryService: ExecutionHistoryService;
+  private claudeService: any;
+  private emailService: EmailService;
+  private authService: AuthService;
+  private webUIService: WebUIService;
+  private authMiddleware: AuthMiddleware;
+
   constructor() {
     this.app = express();
-    this.port = process.env.PORT || 3000;
+    this.port = parseInt(process.env.PORT || '3000');
     
     // Initialize services
     this.configManager = new ConfigManager();
@@ -44,18 +56,18 @@ class AICodingAgent {
     this.emailService = new EmailService();
     this.authService = new AuthService(this.emailService);
     this.webUIService = new WebUIService();
-    this.authMiddleware = new AuthMiddleware(this.authService);
+    this.authMiddleware = new AuthMiddleware(this.authService as any);
   }
 
   /**
    * Merge request parameters with default values from prompt schema
    * @deprecated Use shared utility from prompt-utils.js instead
    */
-  mergeParametersWithDefaults(prompt, requestParameters = {}) {
+  mergeParametersWithDefaults(prompt: any, requestParameters: any = {}): any {
     return mergeParametersWithDefaults(prompt, requestParameters);
   }
 
-  async initialize() {
+  async initialize(): Promise<void> {
     try {
       // Validate Claude service configuration
       const serviceValidation = await ClaudeServiceFactory.validateConfiguration();
@@ -92,7 +104,7 @@ class AICodingAgent {
     }
   }
 
-  setupMiddleware() {
+  setupMiddleware(): void {
     // Parse JSON bodies
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
@@ -113,7 +125,7 @@ class AICodingAgent {
     });
   }
 
-  setupRoutes() {
+  setupRoutes(): void {
     // Authentication routes
     this.app.get('/login', (req, res) => {
       this.webUIService.renderLoginPage(req, res);
@@ -132,7 +144,7 @@ class AICodingAgent {
 
         const result = await this.authService.requestMagicLink(email);
         res.json(result);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Magic link request error:', error);
         res.status(400).json({ 
           error: 'Login request failed',
@@ -149,14 +161,14 @@ class AICodingAgent {
           return res.redirect('/login?error=invalid_token');
         }
 
-        const loginResult = await this.authService.verifyMagicLink(token);
+        const loginResult = await this.authService.verifyMagicLink(token as string);
         
         // Set session cookie
         this.authMiddleware.setSessionCookie(res, loginResult.sessionId);
         
         // Redirect to dashboard with success message
         res.redirect('/?success=login');
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Magic link verification error:', error);
         let errorCode = 'invalid_token';
         if (error.message.includes('expired')) {
@@ -188,7 +200,7 @@ class AICodingAgent {
           prompts: this.promptManager.getPrompts(),
           mcpServers: this.configManager.getMcpServers(),
           authManager: this.authManager,
-          user: req.user
+          user: (req as any).user
         });
       }
     );
@@ -223,7 +235,7 @@ class AICodingAgent {
           
           const authUrl = await this.authManager.initiateAuthorization(mcpServer);
           res.json({ authUrl });
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Authorization error:', error);
           res.status(500).json({ error: error.message });
         }
@@ -243,7 +255,7 @@ class AICodingAgent {
           
           await this.setupGitCredentials(token);
           res.json({ success: true, message: 'Git credentials configured successfully' });
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Git credentials setup error:', error);
           res.status(500).json({ error: error.message });
         }
@@ -254,7 +266,7 @@ class AICodingAgent {
     this.app.get('/oauth/callback', async (req, res) => {
       try {
         await this.authManager.handleOAuthCallback(req, res);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ OAuth callback error:', error);
         res.status(500).send('OAuth callback failed');
       }
@@ -277,7 +289,7 @@ class AICodingAgent {
           const parameters = this.mergeParametersWithDefaults(prompt, requestParameters);
 
           // Check if all required MCP servers are authorized
-          const unauthorizedServers = [];
+          const unauthorizedServers: string[] = [];
           for (const mcpServerName of prompt.mcp_servers) {
             const mcpServer = this.configManager.getMcpServer(mcpServerName);
             
@@ -294,7 +306,7 @@ class AICodingAgent {
             
             // Send email notification
             await this.emailService.sendAuthorizationNeededEmail(
-              process.env.EMAIL,
+              process.env.EMAIL || '',
               unauthorizedServers
             );
             
@@ -306,7 +318,7 @@ class AICodingAgent {
           }
 
           // Execute the prompt
-          const userEmail = req.user?.email || 'unknown';
+          const userEmail = (req as any).user?.email || 'unknown';
           await this.claudeService.executePromptStream(
             prompt,
             parameters,
@@ -316,7 +328,7 @@ class AICodingAgent {
             userEmail
           );
           
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Prompt execution error:', error);
           if (!res.headersSent) {
             res.status(500).json({ error: error.message });
@@ -329,8 +341,8 @@ class AICodingAgent {
     this.app.get('/api/executions',
       this.authMiddleware.authenticate.bind(this.authMiddleware),
       (req, res) => {
-        const limit = parseInt(req.query.limit) || 50;
-        const promptName = req.query.prompt;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const promptName = req.query.prompt as string;
         
         let history;
         if (promptName) {
@@ -381,7 +393,7 @@ class AICodingAgent {
       try {
         const validation = await ClaudeServiceFactory.validateConfiguration();
         res.json(validation);
-      } catch (error) {
+      } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
@@ -405,7 +417,7 @@ class AICodingAgent {
         }
         
         res.json(result);
-      } catch (error) {
+      } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
@@ -425,8 +437,8 @@ class AICodingAgent {
 
       try {
         const servers = await this.claudeService.listMcpServers();
-        res.json({ servers: servers.split('\n').filter(s => s.trim()) });
-      } catch (error) {
+        res.json({ servers: servers.split('\n').filter((s: string) => s.trim()) });
+      } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
@@ -449,7 +461,7 @@ class AICodingAgent {
 
         const result = await this.claudeService.addMcpServer(name, config, scope);
         res.json(result);
-      } catch (error) {
+      } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
@@ -465,7 +477,7 @@ class AICodingAgent {
         const { name } = req.params;
         const result = await this.claudeService.removeMcpServer(name);
         res.json({ success: true, output: result });
-      } catch (error) {
+      } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
@@ -488,9 +500,9 @@ class AICodingAgent {
 
   /**
    * Setup git credentials for Claude Code operations
-   * @param {string} token - GitHub personal access token
+   * @param token - GitHub personal access token
    */
-  async setupGitCredentials(token) {
+  async setupGitCredentials(token: string): Promise<void> {
     const fs = await import('fs');
     const os = await import('os');
     
@@ -508,7 +520,7 @@ class AICodingAgent {
     console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
   }
 
-  async start() {
+  async start(): Promise<void> {
     await this.initialize();
     
     this.app.listen(this.port, () => {

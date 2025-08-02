@@ -2,23 +2,27 @@
   "name": "ai-coding-agent",
   "version": "1.0.0",
   "description": "an ai coding agent",
-  "main": "index.js",
+  "main": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
-    "dev-no-auth": "DISABLE_AUTH=true node --watch index.js",
-    "start-no-auth": "DISABLE_AUTH=true node index.js",
+    "start": "node --import ./loader.mjs index.ts",
+    "dev": "node --import ./loader.mjs --watch index.ts",
+    "dev-no-auth": "DISABLE_AUTH=true node --import ./loader.mjs --watch index.ts",
+    "start-no-auth": "DISABLE_AUTH=true node --import ./loader.mjs index.ts",
+    "build": "tsc",
+    "dev:ts": "ts-node --esm",
     "validate": "node scripts/validate-config.js",
     "test-connections": "node scripts/test-connections.js",
     "test-git": "node scripts/test-git-credentials.js",
     "test-claude-code": "node tests/test-claude-code-basic.js",
     "test-claude-integration": "node tests/test-claude-service-integration.js",
-    "start-claude-code": "CLAUDE_SERVICE=CLAUDECODE node index.js",
-    "dev-claude-code": "CLAUDE_SERVICE=CLAUDECODE node --watch index.js",
-    "start-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node index.js",
-    "dev-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node --watch index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start-claude-code": "CLAUDE_SERVICE=CLAUDECODE node --import ./loader.mjs index.ts",
+    "dev-claude-code": "CLAUDE_SERVICE=CLAUDECODE node --import ./loader.mjs --watch index.ts",
+    "start-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node --import ./loader.mjs index.ts",
+    "dev-claude-code-sdk": "CLAUDE_SERVICE=CLAUDECODESDK node --import ./loader.mjs --watch index.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "repository": {
     "type": "git",
@@ -49,6 +53,13 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.19"
+    "@jest/globals": "^30.0.5",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.9",
+    "jest": "^30.0.5",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   }
 }

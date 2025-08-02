@@ -60,8 +60,30 @@ curl -X POST http://localhost:3000/prompt/clone-github-repository/run \
 
 ## Test files 
 
-There are a wide variety of tests is located in the `tests` directory. 
+The maintained tests can be run with `npm test`. This should be done after every change.
 
+
+There are a wide variety of unmaintained test scripts in the `tests` directory. 
 These are not actively maintained. But if you are wanting to write a test, 
 check the tests directory, it might already exist.  Also, if you end up writing a new one, 
 create it in the `tests` directory.
+
+
+## Coding Style 
+
+When possible, use functions instead of classes like:
+
+```javascript
+function myFunc({ paramA = 1, paramB = 2 } = {}) {}
+```
+
+
+If we will need to do some dependency injection, structure the import
+and function as follows:
+
+```javascript
+import foo as defaultFoo from 'foo';
+function myFunc({ foo = defaultFoo } = {}) {}
+```
+
+
