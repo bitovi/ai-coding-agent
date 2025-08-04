@@ -1,13 +1,13 @@
 import { Layout } from '@/components/layout/Layout';
 import { PromptsList } from '@/components/prompts/PromptsList';
 import { ConnectionsList } from '@/components/connections/ConnectionsList';
-import { useDashboardData } from '@/hooks/api';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Dashboard() {
-  const { data: dashboardData } = useDashboardData();
+  const { data: user } = useAuth();
 
   return (
-    <Layout user={dashboardData?.user}>
+    <Layout user={user}>
       <div className="space-y-8">
         <PromptsList />
         <ConnectionsList />

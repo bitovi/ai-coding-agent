@@ -109,8 +109,11 @@ class AICodingAgent {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
     
-    // Serve static files
+    // Serve static files from public directory
     this.app.use('/static', express.static(path.join(__dirname, 'public')));
+    
+    // Serve built frontend static assets
+    this.app.use('/assets', express.static(path.join(__dirname, 'frontend/dist/assets')));
     
     // CORS for development
     this.app.use((req, res, next) => {
@@ -126,8 +129,28 @@ class AICodingAgent {
   }
 
   setupRoutes(): void {
+    // Legacy routes FIRST - before any other middleware can interfere
+    // IMPORTANT: These routes must be defined first to prevent static file handling
+    this.app.get('/legacy/prompts/:promptName/activity.html', (req, res) => {
+      console.log('🔍 Legacy route hit for:', req.params.promptName);
+      const promptName = req.params.promptName;
+      this.webUIService.renderPromptActivityPage(req, res, {
+        promptName,
+        promptManager: this.promptManager,
+        executionHistoryService: this.executionHistoryService
+      });
+    });
+
+    // Test route to verify legacy routing works
+    this.app.get('/legacy/test', (req, res) => {
+      console.log('🔍 Legacy test route hit!');
+      res.send('<h1>Legacy route works!</h1><p>This confirms legacy routes are functioning.</p>');
+    });
+
     // Authentication routes
-    this.app.get('/login', (req, res) => {
+    // Note: /login route is now handled by React Router in the SPA
+    // The static login page is only served for non-browser requests or as fallback
+    this.app.get('/login-static', (req, res) => {
       this.webUIService.renderLoginPage(req, res);
     });
 
@@ -192,34 +215,16 @@ class AICodingAgent {
       res.json({ success: true, message: 'Logged out successfully' });
     });
 
-    // Dashboard and protected routes
-    this.app.get('/', 
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        this.webUIService.renderIndexPage(req, res, {
-          prompts: this.promptManager.getPrompts(),
-          mcpServers: this.configManager.getMcpServers(),
-          authManager: this.authManager,
-          user: (req as any).user
-        });
-      }
-    );
-
+    // Dashboard and protected routes are now handled by React Router
+    // Legacy routes for backwards compatibility (redirect to React app)
     this.app.get('/index.html', (req, res) => {
       res.redirect('/');
     });
 
-    // Prompt activity page
-    this.app.get('/prompts/:promptName/activity.html', 
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        this.webUIService.renderPromptActivityPage(req, res, {
-          promptName: req.params.promptName,
-          promptManager: this.promptManager,
-          executionHistoryService: this.executionHistoryService
-        });
-      }
-    );
+    // Legacy prompt activity page (redirect to React route)
+    this.app.get('/prompts/:promptName/activity.html', (req, res) => {
+      res.redirect(`/prompts/${req.params.promptName}/activity`);
+    });
 
     // MCP authorization endpoint
     this.app.post('/mcp/:mcpName/authorize',
@@ -486,6 +491,7 @@ class AICodingAgent {
     // Set up the new modular web client API routes
     const webClientDeps = {
       authService: this.authService,
+      authMiddleware: this.authMiddleware,
       promptManager: this.promptManager,
       configManager: this.configManager,
       authManager: this.authManager,
@@ -496,6 +502,33 @@ class AICodingAgent {
 
     // Wire up all the web client service routes (GET /api/user, /api/prompts, etc.)
     setupAllWebClientRoutes(this.app, webClientDeps);
+
+    // Serve the React app for all non-API routes (SPA fallback)
+    // This must be the last route to catch all unmatched routes
+    this.app.get('*', (req, res) => {
+      // Skip API routes, auth routes, and static files
+      if (req.path.startsWith('/api/') || 
+          req.path.startsWith('/auth/') || 
+          req.path.startsWith('/mcp/') ||
+          req.path.startsWith('/oauth/') ||
+          req.path.startsWith('/prompt/') ||
+          req.path.startsWith('/legacy/') ||
+          req.path.startsWith('/static/') ||
+          req.path.startsWith('/assets/') ||
+          req.path === '/health' ||
+          req.path === '/login-static') {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      
+      // Serve the React app
+      const frontendIndexPath = path.join(__dirname, 'frontend/dist/index.html');
+      res.sendFile(frontendIndexPath, (err) => {
+        if (err) {
+          console.error('Error serving React app:', err);
+          res.status(500).send('Error loading application');
+        }
+      });
+    });
   }
 
   /**

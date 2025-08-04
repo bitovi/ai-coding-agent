@@ -10,6 +10,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    // Ensure assets are served from the correct path when served by backend
+    assetsDir: 'assets',
+  },
   server: {
     port: 5173,
     proxy: {

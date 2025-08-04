@@ -195,7 +195,7 @@ export const webClientServices = {
   async setupCredentials(type: string, credentials: any): Promise<{ success: boolean; message: string }> {
     const response = await apiRequest(`/api/connections/credential/${type}/setup`, {
       method: 'POST',
-      body: JSON.stringify({ credentials }),
+      body: JSON.stringify(credentials),
     });
     return response.json();
   },

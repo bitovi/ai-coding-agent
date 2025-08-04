@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { useLogout } from '@/hooks/api';
+import { useLogout } from '@/hooks/useAuth';
 import { User, LogOut } from 'lucide-react';
 
 interface HeaderProps {
@@ -9,10 +9,10 @@ interface HeaderProps {
 }
 
 export function Header({ user }: HeaderProps) {
-  const logoutMutation = useLogout();
+  const logout = useLogout();
 
   const handleLogout = () => {
-    logoutMutation.mutate();
+    logout();
   };
 
   return (
@@ -38,7 +38,6 @@ export function Header({ user }: HeaderProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleLogout}
-                disabled={logoutMutation.isPending}
                 className="flex items-center gap-2"
               >
                 <LogOut className="h-4 w-4" />

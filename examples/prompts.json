@@ -59,7 +59,7 @@
     "messages": [
         {
             "role": "user",
-            "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder.",
+            "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder. Use https methods that will work with a .git-credentials file.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -17,12 +17,26 @@ RUN mkdir -p /shared/repos
 
 # Copy package files first for better Docker layer caching
 COPY package*.json ./
+COPY frontend/package*.json ./frontend/
 
-# Install dependencies
+# Install root dependencies first
 RUN npm ci --only=production && npm cache clean --force
 
+# Install frontend dependencies
+WORKDIR /app/frontend
+RUN npm ci && npm cache clean --force
+
 # Copy application code
+WORKDIR /app
 COPY . .
+
+# Build frontend
+WORKDIR /app/frontend
+RUN npm run build
+
+# Build backend
+WORKDIR /app
+RUN npm run build:backend
 
 # Copy and set up the Git credentials script
 COPY scripts/setup-git-credentials.sh /usr/local/bin/setup-git-credentials.sh

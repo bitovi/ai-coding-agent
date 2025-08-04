@@ -66,19 +66,24 @@ export class AuthMiddleware {
    * Try to authenticate using session cookie
    */
   trySessionAuthentication(req, res) {
+    console.log('🔍 Trying session authentication for:', req.path);
     const sessionId = this.getSessionIdFromRequest(req);
+    console.log('🔍 Session ID from request:', sessionId);
     
     if (!sessionId) {
+      console.log('🔍 No session ID found');
       return { success: false, reason: 'no_session' };
     }
 
     const session = this.authService.getSession(sessionId);
+    console.log('🔍 Session lookup result:', session ? 'found' : 'not found');
     if (!session) {
       // Clear invalid session cookie
       this.clearSessionCookie(res);
       return { success: false, reason: 'invalid_session' };
     }
 
+    console.log('🔍 Session authentication successful for:', session.email);
     return { 
       success: true, 
       user: { 
@@ -126,11 +131,21 @@ export class AuthMiddleware {
   }
 
   /**
-   * Require login - redirect to login page or return JSON error
+   * Handle authentication failure by redirecting or returning JSON
    */
   requireLogin(req, res) {
-    // If it's an API request (JSON content-type or AJAX), return JSON error
-    if (req.xhr || req.headers.accept?.includes('application/json') || req.headers['content-type']?.includes('application/json')) {
+    // Check if this is an API request in multiple ways:
+    // 1. Path starts with /api/
+    // 2. Accept header includes JSON
+    // 3. Content-Type is JSON
+    // 4. XMLHttpRequest header (req.xhr)
+    const isApiRequest = req.path.startsWith('/api/') ||
+                        req.xhr || 
+                        req.headers.accept?.includes('application/json') || 
+                        req.headers['content-type']?.includes('application/json') ||
+                        req.headers.accept?.includes('text/event-stream'); // For streaming endpoints
+
+    if (isApiRequest) {
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Login required',

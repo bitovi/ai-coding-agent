@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { ConnectionStatus } from '@/services/api';
-import { useAuthorizeService } from '@/hooks/api';
+import { useAuthorizeService, useSetupCredentials } from '@/hooks/api';
 import { CheckCircle, XCircle, Lock, Wifi } from 'lucide-react';
 
 interface ConnectionCardProps {
@@ -11,10 +11,21 @@ interface ConnectionCardProps {
 
 export function ConnectionCard({ connection }: ConnectionCardProps) {
   const authorizeServiceMutation = useAuthorizeService();
+  const setupCredentialsMutation = useSetupCredentials();
   
   const isAuthorized = connection.isAvailable;
   
   const handleAuthorize = async () => {
+    // Handle different connection types
+    if (connection.type === 'credential') {
+      await handleCredentialSetup();
+    } else {
+      // Handle MCP server authorization
+      await handleMcpAuthorization();
+    }
+  };
+
+  const handleMcpAuthorization = async () => {
     try {
       const result = await authorizeServiceMutation.mutateAsync(connection.name);
       if (result.authUrl) {
@@ -22,6 +33,40 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
       }
     } catch (error) {
       console.error('Authorization failed:', error);
+    }
+  };
+
+  const handleCredentialSetup = async () => {
+    try {
+      if (connection.name === 'git-credentials') {
+        const token = prompt('Enter your GitHub Personal Access Token:');
+        if (!token) {
+          return;
+        }
+        
+        await setupCredentialsMutation.mutateAsync({
+          type: 'git-credentials',
+          credentials: { token }
+        });
+        
+        alert('✅ Git credentials configured successfully!');
+      } else if (connection.name === 'docker-registry') {
+        const username = prompt('Enter your Docker username:');
+        if (!username) return;
+        
+        const password = prompt('Enter your Docker password/token:');
+        if (!password) return;
+        
+        await setupCredentialsMutation.mutateAsync({
+          type: 'docker-registry',
+          credentials: { username, password }
+        });
+        
+        alert('✅ Docker credentials configured successfully!');
+      }
+    } catch (error) {
+      console.error('Credential setup failed:', error);
+      alert('Failed to setup credentials. Please try again.');
     }
   };
 
@@ -86,14 +131,14 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
           <Button
             size="sm"
             onClick={handleAuthorize}
-            disabled={authorizeServiceMutation.isPending}
+            disabled={authorizeServiceMutation.isPending || setupCredentialsMutation.isPending}
             className="w-full"
           >
-            {authorizeServiceMutation.isPending ? (
-              'Authorizing...'
+            {(authorizeServiceMutation.isPending || setupCredentialsMutation.isPending) ? (
+              'Setting up...'
             ) : (
               <>
-                🔐 Authorize
+                {connection.type === 'credential' ? '🔐 Setup' : '🔐 Authorize'}
               </>
             )}
           </Button>

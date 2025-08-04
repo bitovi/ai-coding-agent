@@ -1,9 +1,16 @@
 import type { Request, Response } from 'express';
 import type { ApiResponse } from '../../types/index.js';
+import { 
+  validateGitCredentials, 
+  getGitCredentialDetails, 
+  isConnectionAvailable as checkConnectionValidator,
+  type GitCredentialDetails 
+} from '../../auth/connectionValidators.js';
 
 // Dependencies interface for dependency injection
 export interface Dependencies {
   authService?: any;
+  authMiddleware?: any;
   promptManager?: any;
   configManager?: any;
   authManager?: any;
@@ -36,11 +43,11 @@ export function isBrowserRequest(req: Request): boolean {
 export function checkConnectionAvailability(connectionType: string): boolean {
   switch (connectionType) {
     case 'git-credentials':
-      return !!(process.env.GIT_TOKEN || process.env.GITHUB_TOKEN);
+      return validateGitCredentials();
     case 'docker-registry':
       return !!(process.env.DOCKER_USERNAME && process.env.DOCKER_PASSWORD);
     default:
-      return false;
+      return checkConnectionValidator(connectionType);
   }
 }
 
@@ -68,9 +75,29 @@ export function getConnectionMethod(connectionType: string): string {
 
 export async function setupGitCredentials(token: string): Promise<boolean> {
   try {
-    // Implementation would save git credentials
-    // For now, just validate token format
-    return token.startsWith('ghp_') || token.startsWith('github_pat_');
+    const fs = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+    
+    // Validate token format first
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+      console.error('Invalid GitHub token format');
+      return false;
+    }
+    
+    // Determine the appropriate home directory
+    const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
+    
+    // Create .git-credentials file
+    const gitCredentialsPath = path.join(homeDir, '.git-credentials');
+    const username = process.env.GIT_USERNAME || 'token';
+    const credentialsContent = `https://${username}:${token}@github.com\n`;
+    
+    // Write the credentials file with proper permissions
+    await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
+    
+    console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    return true;
   } catch (error) {
     console.error('Failed to setup git credentials:', error);
     return false;
@@ -84,5 +111,14 @@ export async function setupDockerCredentials(credentials: any): Promise<boolean>
   } catch (error) {
     console.error('Failed to setup docker credentials:', error);
     return false;
+  }
+}
+
+export function getConnectionDetails(connectionType: string): any {
+  switch (connectionType) {
+    case 'git-credentials':
+      return getGitCredentialDetails();
+    default:
+      return { available: checkConnectionAvailability(connectionType) };
   }
 }

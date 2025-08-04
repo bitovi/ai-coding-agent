@@ -3,6 +3,7 @@ import type { Connection, ApiResponse } from '../../types/index.js';
 import { 
   handleError, 
   checkConnectionAvailability,
+  getConnectionDetails,
   setupGitCredentials,
   setupDockerCredentials,
   type Dependencies 
@@ -52,6 +53,7 @@ export function getConnections(deps: Dependencies = {}) {
 
       credentialConnections.forEach(cred => {
         const isAvailable = checkConnectionAvailability(cred.name);
+        const connectionDetails = getConnectionDetails(cred.name);
         
         connections.push({
           name: cred.name,
@@ -61,7 +63,8 @@ export function getConnections(deps: Dependencies = {}) {
           setupUrl: `/api/connections/credential/${cred.name}/setup`,
           details: {
             lastConfigured: isAvailable ? new Date().toISOString() : null,
-            method: cred.method
+            method: cred.method,
+            ...connectionDetails
           }
         });
       });
@@ -175,15 +178,7 @@ export function setupCredentialConnection(deps: Dependencies = {}) {
   return async (req: Request, res: Response) => {
     try {
       const { credentialType } = req.params;
-      const { token } = req.body;
-
-      if (!token) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Token is required',
-          timestamp: new Date().toISOString()
-        });
-      }
+      const { token, username, password } = req.body;
 
       // Handle different credential types
       let success = false;
@@ -191,11 +186,25 @@ export function setupCredentialConnection(deps: Dependencies = {}) {
 
       switch (credentialType) {
         case 'git-credentials':
+          if (!token) {
+            return res.status(400).json({
+              error: 'Bad Request',
+              message: 'Token is required for git credentials',
+              timestamp: new Date().toISOString()
+            });
+          }
           success = await setupGitCredentials(token);
           message = success ? 'Git credentials configured successfully' : 'Failed to configure git credentials';
           break;
         case 'docker-registry':
-          success = await setupDockerCredentials(token);
+          if (!username || !password) {
+            return res.status(400).json({
+              error: 'Bad Request',
+              message: 'Username and password are required for docker credentials',
+              timestamp: new Date().toISOString()
+            });
+          }
+          success = await setupDockerCredentials({ username, password });
           message = success ? 'Docker credentials configured successfully' : 'Failed to configure docker credentials';
           break;
         default:

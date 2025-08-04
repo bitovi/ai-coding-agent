@@ -59,6 +59,30 @@
 			"group": "test",
 			"problemMatcher": [],
 			"isBackground": false
+		},
+		{
+			"label": "Build Full Application",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"group": "build",
+			"problemMatcher": ["$tsc"],
+			"isBackground": false
+		},
+		{
+			"label": "Start Production Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"start:prod"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": true
 		}
 	]
 }
