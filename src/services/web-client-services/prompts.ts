@@ -7,6 +7,8 @@ import {
   getConnectionMethod,
   type Dependencies 
 } from './common.js';
+import { mergeParametersWithDefaults, processPrompt } from '../../../public/js/prompt-utils.js';
+import { isServerAuthorized } from '../../auth/authUtils.js';
 
 export function getPrompts(deps: Dependencies = {}) {
   const { promptManager, configManager, authManager } = deps;
@@ -76,13 +78,8 @@ export function getPrompts(deps: Dependencies = {}) {
         };
       });
 
-      const response: ApiResponse<{ prompts: Prompt[] }> = {
-        success: true,
-        data: { prompts: promptsWithConnections },
-        timestamp: new Date().toISOString()
-      };
-
-      res.json(response);
+      // Return prompts data directly according to API specification
+      res.json({ prompts: promptsWithConnections });
     } catch (error) {
       handleError(res, error);
     }
@@ -126,17 +123,14 @@ export function getPrompt(deps: Dependencies = {}) {
 
       const canRun = connections.every(conn => conn.isAvailable);
 
-      const response: ApiResponse<Prompt> = {
-        success: true,
-        data: {
-          ...prompt,
-          canRun,
-          connections
-        },
-        timestamp: new Date().toISOString()
+      // Return prompt data directly according to API specification
+      const promptWithConnections: Prompt = {
+        ...prompt,
+        canRun,
+        connections
       };
 
-      res.json(response);
+      res.json(promptWithConnections);
     } catch (error) {
       handleError(res, error);
     }
@@ -144,70 +138,65 @@ export function getPrompt(deps: Dependencies = {}) {
 }
 
 export function executePrompt(deps: Dependencies = {}) {
-  const { promptManager, configManager, authManager, claudeService } = deps;
+  const { promptManager, configManager, authManager, claudeService, emailService } = deps;
   
   return async (req: Request, res: Response) => {
     try {
       const { promptName } = req.params;
-      const { parameters } = req.body;
+      
+      
+      const requestParameters = req.body.parameters || {};
+
       
       const prompt = promptManager?.getPrompt(promptName);
       if (!prompt) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: `Prompt '${promptName}' does not exist`,
-          timestamp: new Date().toISOString()
-        });
-      }
+        return res.status(404).json({ error: 'Prompt not found' });
+      }      // Merge request parameters with defaults from prompt schema (match legacy behavior)
+      const parameters = mergeParametersWithDefaults(prompt, requestParameters);
 
-      // Check if all required connections are available
-      const unavailableConnections: Connection[] = [];
+      // Process the prompt to substitute parameters into the template (THIS WAS MISSING!)
+      const processedPrompt = processPrompt(prompt, parameters);
+
       
+      // Check if all required MCP servers are authorized (match legacy behavior)
+      const unauthorizedServers: string[] = [];
       if (prompt.mcp_servers) {
-        prompt.mcp_servers.forEach((serverName: string) => {
-          if (!authManager?.isAuthorized(serverName)) {
-            unavailableConnections.push({
-              name: serverName,
-              type: 'mcp-server',
-              description: `${serverName} integration`,
-              isAvailable: false,
-              authUrl: `/api/connections/mcp/${serverName}/authorize`
-            });
+        for (const mcpServerName of prompt.mcp_servers) {
+          const mcpServer = configManager?.getMcpServer(mcpServerName);
+          
+          // Use the same authUtils function as legacy endpoint
+          const isAuthorized = isServerAuthorized(mcpServerName, mcpServer, authManager);
+          if (!isAuthorized) {
+            unauthorizedServers.push(mcpServerName);
           }
-        });
+        }
       }
 
-      if (unavailableConnections.length > 0) {
+      if (unauthorizedServers.length > 0) {
+        // Save prompt for later execution (match legacy behavior)
+        promptManager?.savePendingPrompt(promptName, parameters);
+        
+        // Send email notification (match legacy behavior)
+        if (emailService?.sendAuthorizationNeededEmail) {
+          await emailService.sendAuthorizationNeededEmail(
+            process.env.EMAIL || '',
+            unauthorizedServers
+          );
+        }
+        
         return res.status(401).json({
           error: 'Authorization required',
-          requiredConnections: unavailableConnections,
-          message: 'Please authorize the required connections',
-          timestamp: new Date().toISOString()
+          unauthorizedServers,
+          message: 'Please authorize the required MCP servers. An email has been sent with instructions.'
         });
       }
 
-      // Set up SSE
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Cache-Control'
-      });
-
-      // Send start event
-      res.write(`data: ${JSON.stringify({
-        type: 'start',
-        promptName: promptName,
-        timestamp: new Date().toISOString()
-      })}\n\n`);
-
-      // Execute prompt via Claude service
+      // Execute prompt via Claude service (match legacy behavior - let Claude service handle SSE headers)
       const userEmail = req.user?.email || 'unknown';
       
       if (claudeService?.executePromptStream) {
         await claudeService.executePromptStream(
-          prompt,
+          processedPrompt, // Use the processed prompt with parameters substituted
           parameters,
           configManager,
           authManager,
@@ -215,7 +204,15 @@ export function executePrompt(deps: Dependencies = {}) {
           userEmail
         );
       } else {
-        // Fallback if claude service not available
+        // Fallback if claude service not available - only set headers if claude service unavailable
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Cache-Control'
+        });
+        
         res.write(`data: ${JSON.stringify({
           type: 'output',
           content: 'Claude service not available',
@@ -227,24 +224,40 @@ export function executePrompt(deps: Dependencies = {}) {
           success: false,
           timestamp: new Date().toISOString()
         })}\n\n`);
-      }
-
-      res.end();
-    } catch (error) {
-      console.error('Prompt execution error:', error);
-      
-      if (!res.headersSent) {
-        handleError(res, error);
-      } else {
-        // Send error via SSE
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: error.message,
-          timestamp: new Date().toISOString()
-        })}\n\n`);
+        
         res.end();
       }
+    } catch (error: any) {
+      console.error('❌ Prompt execution error:', error);
+      
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
+      // Note: Don't try to write SSE errors if headers are already sent
+      // The Claude service handles its own error responses via SSE
     }
+  };
+}
+
+/**
+ * Debug endpoint to test body parsing
+ */
+export function debugBody(deps: Dependencies = {}) {
+  return (req: Request, res: Response) => {
+    console.log('=== DEBUG ENDPOINT ===');
+    console.log('Method:', req.method);
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Raw body:', req.body);
+    console.log('Body type:', typeof req.body);
+    console.log('Body stringified:', JSON.stringify(req.body));
+    
+    res.json({
+      method: req.method,
+      contentType: req.headers['content-type'],
+      body: req.body,
+      bodyType: typeof req.body,
+      parameters: req.body?.parameters
+    });
   };
 }
 
@@ -262,6 +275,9 @@ export function setupPromptRoutes(app: Express, deps: Dependencies = {}) {
   
   // POST /api/prompts/:promptName/run - Execute a prompt with streaming response
   app.post('/api/prompts/:promptName/run', executePrompt(deps));
+  
+  // POST /api/debug/body - Debug endpoint to test body parsing
+  app.post('/api/debug/body', debugBody(deps));
 }
 
 

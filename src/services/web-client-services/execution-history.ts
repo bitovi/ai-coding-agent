@@ -11,12 +11,11 @@ export function getExecutionHistory(deps: Dependencies = {}) {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
       const offset = parseInt(req.query.offset as string) || 0;
-      const status = req.query.status as string;
-      const user = req.query.user as string;
 
-      // Get executions (mock data for now)
-      const executions = executionHistoryService?.getExecutions?.({ limit, offset, status, user }) || [];
-      const total = executionHistoryService?.getTotalExecutions?.() || executions.length;
+      // Get all executions using the correct method name
+      const allExecutions = executionHistoryService?.getAllHistory?.(limit + offset) || [];
+      const executions = allExecutions.slice(offset, offset + limit);
+      const total = allExecutions.length;
 
       const response: ApiResponse = {
         success: true,
@@ -57,28 +56,23 @@ export function getPromptActivity(deps: Dependencies = {}) {
         });
       }
 
-      // Get execution history (mock data for now)
-      const executions = executionHistoryService?.getExecutionsForPrompt?.(promptName, { limit, offset }) || [];
-      const pendingExecutions = executionHistoryService?.getPendingExecutions?.(promptName) || [];
-      const total = executionHistoryService?.getTotalExecutions?.(promptName) || executions.length;
+      // Get execution history using the correct method name
+      const allExecutions = executionHistoryService?.getPromptHistory?.(promptName, limit + offset) || [];
+      const executions = allExecutions.slice(offset, offset + limit);
+      const total = allExecutions.length;
 
-      const response: ApiResponse = {
-        success: true,
-        data: {
-          prompt: {
-            name: prompt.name,
-            description: prompt.description
-          },
-          executions,
-          pendingExecutions,
-          pagination: {
-            total,
-            limit,
-            offset,
-            hasMore: offset + limit < total
-          }
+      const response = {
+        prompt: {
+          name: prompt.name,
+          description: prompt.description
         },
-        timestamp: new Date().toISOString()
+        executions,
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total
+        }
       };
 
       res.json(response);

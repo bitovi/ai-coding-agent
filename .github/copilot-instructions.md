@@ -10,6 +10,32 @@ Example prompts and MCP servers can be found in the `examples` directory.
 The specifications in the `specifications` directory should be kept up to date.
 
 
+## Frontend APIs 
+
+The frontend APIs are defined in `src/services/web-client-services/`.
+
+Read about them in `specifications/ui-apis.md` when needing to know how the 
+backend API works. We should always follow this specification and keep it up to date with any backend changes.
+
+
+## Frontend comands 
+
+Make sure to run the frontend commands from the `frontend` directory.
+
+```
+cd frontend
+```
+
+## Starting the Frontend Development Server
+
+To start the frontend development server, navigate to the `frontend` directory and run:
+
+```bash
+cd frontend
+npm run dev
+```
+
+
 ## Testing Prompts with Docker
 
 To run docker (with disabled auth for testing):
@@ -87,3 +113,7 @@ function myFunc({ foo = defaultFoo } = {}) {}
 ```
 
 
+## Control Behavior 
+
+UI elements that are not interactive should not have hover effects. 
+They shouldn't change background color or perform some other effect on hover.

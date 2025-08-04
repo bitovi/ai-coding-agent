@@ -5,10 +5,15 @@
     "messages": [
       {
         "role": "user",
-        "content": "Hello Claude! Please respond with a friendly greeting and tell me you're working correctly.",
+        "content": "{{greeting}} Claude! Please respond with a friendly greeting and tell me you're working correctly.",
         "parameters": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "greeting": {
+              "type": "string",
+              "description": "A greeting to send to Claude"
+            }
+          },
           "required": []
         }
       }
@@ -90,7 +95,7 @@
   },
   {
     "name": "code-review",
-    "mcp_servers": ["github", "local-files"],
+    "mcp_servers": ["github"],
     "messages": [
       {
         "role": "system",

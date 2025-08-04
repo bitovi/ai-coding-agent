@@ -381,6 +381,7 @@ function runPromptWithParameters(promptName) {
     // Start streaming execution
     streamPromptExecution(promptName, parameters, outputDiv, stopButton, button, originalText);
 }
+window.runPromptWithParameters = runPromptWithParameters; // Expose for global access
 
 /**
  * Stream prompt execution results using Server-Sent Events

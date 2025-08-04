@@ -29,26 +29,22 @@ export function mergeParametersWithDefaults(prompt, requestParameters = {}) {
  */
 export function processPrompt(prompt, parameters) {
   const processedMessages = prompt.messages.map(message => {
-    if (message.parameters) {
+    console.log('Processing message:', message.role, message.content, parameters);
       // Substitute parameters in content
-      let content = message.content;
-      
-      // Simple parameter substitution
-      for (const [key, value] of Object.entries(parameters)) {
-        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-        content = content.replace(regex, String(value));
-      }
-      
-      return {
-        role: message.role,
-        content: content
-      };
+    let content = message.content;
+    
+    // Simple parameter substitution
+    for (const [key, value] of Object.entries(parameters)) {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+      content = content.replace(regex, String(value));
     }
     
     return {
       role: message.role,
-      content: message.content
+      content: content
     };
+    
+
   });
 
   return { ...prompt, messages: processedMessages };
