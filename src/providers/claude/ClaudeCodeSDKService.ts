@@ -1,19 +1,74 @@
-import { query } from '@anthropic-ai/claude-code';
-import { processPrompt } from '../../public/js/prompt-utils.js';
+import { query, SDKMessage, Options, PermissionMode } from '@anthropic-ai/claude-code';
+import { Response } from 'express';
+import { processPrompt } from '../../../public/js/prompt-utils.js';
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
+import type { Prompt } from '../../types/index.js';
+import type { ExecutionHistoryProvider } from '../ExecutionHistoryProvider.js';
+
+interface McpServerConfig {
+  type: 'stdio' | 'sse' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+interface McpServer {
+  name: string;
+  type?: 'stdio' | 'sse' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+interface McpConfig {
+  mcpServers: Record<string, McpServerConfig>;
+}
+
+interface ClaudeCodeSDKOptions {
+  maxTurns: number;
+  cwd: string;
+  mcpConfig: string;
+  outputFormat: string;
+  allowedTools: string[];
+  permissionMode: PermissionMode;
+}
+
+interface ClaudeCodeSDKMessage {
+  type: string;
+  subtype?: string;
+  message?: any;
+  session_id?: string;
+  cwd?: string;
+  tools?: string[];
+  mcp_servers?: any;
+  model?: string;
+  permissionMode?: string;
+  result?: any;
+  duration_ms?: number;
+  total_cost_usd?: number;
+  num_turns?: number;
+}
 
 /**
  * Service for interacting with Claude Code using the TypeScript SDK
  * Implements the same interface as ClaudeAnthropicSDK but uses the Claude Code SDK
  */
 export class ClaudeCodeSDKService {
-  constructor(executionHistoryService = null) {
+  private executionHistoryService: ExecutionHistoryProvider | null;
+  private tempDir: string;
+  private mcpConfigPath: string;
+
+  constructor(executionHistoryService: ExecutionHistoryProvider | null = null) {
     this.executionHistoryService = executionHistoryService;
     
     // Use WORKING_DIR environment variable if set, otherwise fall back to temp directory
-    let baseDir;
+    let baseDir: string;
     if (process.env.WORKING_DIR) {
       // Resolve relative paths to absolute paths
       baseDir = path.resolve(process.env.WORKING_DIR);
@@ -36,7 +91,7 @@ export class ClaudeCodeSDKService {
   /**
    * Validate that Claude Code SDK authentication is available
    */
-  validateAuthentication() {
+  validateAuthentication(): void {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY environment variable is required for Claude Code SDK');
     }
@@ -46,20 +101,20 @@ export class ClaudeCodeSDKService {
   /**
    * Set the execution history service (used during app initialization)
    */
-  setExecutionHistoryService(executionHistoryService) {
+  setExecutionHistoryService(executionHistoryService: ExecutionHistoryProvider): void {
     this.executionHistoryService = executionHistoryService;
   }
 
   /**
    * Configure MCP servers for Claude Code SDK
    */
-  async configureMcpServers(mcpServers, authManager) {
-    const mcpConfig = {
+  async configureMcpServers(mcpServers: McpServer[], authManager: any): Promise<string> {
+    const mcpConfig: McpConfig = {
       mcpServers: {}
     };
 
     for (const server of mcpServers) {
-      const serverConfig = {
+      const serverConfig: McpServerConfig = {
         type: server.type || 'stdio'
       };
 
@@ -94,8 +149,15 @@ export class ClaudeCodeSDKService {
   /**
    * Execute a prompt with streaming response using Claude Code SDK
    */
-  async executePromptStream(prompt, parameters, configManager, authManager, res, userEmail = 'unknown') {
-    let executionId = null;
+  async executePromptStream(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any, 
+    res: Response, 
+    userEmail: string = 'unknown'
+  ): Promise<void> {
+    let executionId: string | null = null;
     
     try {
       console.log('🔍 [DEBUG] Starting executePromptStream with Claude Code SDK...');
@@ -153,7 +215,7 @@ export class ClaudeCodeSDKService {
         outputFormat: 'stream-json',
         allowedTools: this.buildAllowedTools(mcpServers),
         permissionMode: 'acceptEdits'
-      };
+      } as any;
 
       console.log('🔍 [DEBUG] Claude Code SDK options:', options);
       console.log('🚀 Executing Claude Code SDK query...');
@@ -167,7 +229,7 @@ export class ClaudeCodeSDKService {
         abortController.abort();
       });
 
-      const messages = [];
+      const messages: SDKMessage[] = [];
       let messageStarted = false;
 
       for await (const message of query({
@@ -176,7 +238,7 @@ export class ClaudeCodeSDKService {
         options
       })) {
         messages.push(message);
-        this.handleClaudeCodeSDKMessage(message, res, executionId, messageStarted);
+        this.handleClaudeCodeSDKMessage(message as any, res, executionId, messageStarted);
         
         if (message.type === 'assistant') {
           messageStarted = true;
@@ -194,7 +256,7 @@ export class ClaudeCodeSDKService {
       res.end();
       console.log('🔍 [DEBUG] executePromptStream completed successfully');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Claude Code SDK execution error:', error);
       console.log('🔍 [DEBUG] Error in executePromptStream:', error.stack);
       
@@ -212,7 +274,7 @@ export class ClaudeCodeSDKService {
   /**
    * Build prompt content from processed messages
    */
-  buildPromptContent(processedPrompt, mcpServers) {
+  buildPromptContent(processedPrompt: any, mcpServers: McpServer[]): string {
     let content = '';
     
     // Add system message if MCP servers are available
@@ -232,8 +294,8 @@ export class ClaudeCodeSDKService {
   /**
    * Build allowed tools list for Claude Code SDK
    */
-  buildAllowedTools(mcpServers) {
-    const allowedTools = [];
+  buildAllowedTools(mcpServers: McpServer[]): string[] {
+    const allowedTools: string[] = [];
     
     // Add basic tools
     allowedTools.push('Read', 'Write', 'Bash');
@@ -250,7 +312,12 @@ export class ClaudeCodeSDKService {
   /**
    * Handle messages from Claude Code SDK
    */
-  handleClaudeCodeSDKMessage(message, res, executionId, messageStarted) {
+  handleClaudeCodeSDKMessage(
+    message: ClaudeCodeSDKMessage, 
+    res: Response, 
+    executionId: string | null, 
+    messageStarted: boolean
+  ): void {
     // Record in execution history
     if (this.executionHistoryService && executionId) {
       this.executionHistoryService.addMessage(executionId, 'claude_code_sdk_message', message);
@@ -368,14 +435,14 @@ export class ClaudeCodeSDKService {
    * Process prompt messages for parameter substitution
    * @deprecated Use shared utility from prompt-utils.js instead
    */
-  processPrompt(prompt, parameters) {
+  processPrompt(prompt: Prompt, parameters: Record<string, any>): any {
     return processPrompt(prompt, parameters);
   }
 
   /**
    * Build system message for Claude
    */
-  buildSystemMessage(mcpServers) {
+  buildSystemMessage(mcpServers: McpServer[]): string {
     const serverNames = mcpServers.map(s => s.name).join(', ');
     return `You have access to the following MCP services: ${serverNames}. Use these tools to help the user accomplish their goals.`;
   }
@@ -383,7 +450,7 @@ export class ClaudeCodeSDKService {
   /**
    * Send Server-Sent Event
    */
-  sendSSEEvent(res, event, data) {
+  sendSSEEvent(res: Response, event: string, data: any): void {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
@@ -391,7 +458,12 @@ export class ClaudeCodeSDKService {
   /**
    * Execute a prompt without streaming (for testing/debugging)
    */
-  async executePrompt(prompt, parameters, configManager, authManager) {
+  async executePrompt(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any
+  ): Promise<any> {
     const processedPrompt = processPrompt(prompt, parameters);
     const mcpServers = configManager.prepareMcpServersForClaude(
       prompt.mcp_servers, 
@@ -412,10 +484,10 @@ export class ClaudeCodeSDKService {
       outputFormat: 'json',
       allowedTools: this.buildAllowedTools(mcpServers),
       permissionMode: 'acceptEdits'
-    };
+    } as any;
 
     try {
-      const messages = [];
+      const messages: SDKMessage[] = [];
       
       for await (const message of query({
         prompt: promptContent,
@@ -443,7 +515,7 @@ export class ClaudeCodeSDKService {
       } else {
         throw new Error('No successful result found in Claude Code SDK response');
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Claude Code SDK execution failed: ${error.message}`);
     }
   }
@@ -451,11 +523,11 @@ export class ClaudeCodeSDKService {
   /**
    * Clean up temporary files
    */
-  async cleanup() {
+  async cleanup(): Promise<void> {
     try {
       await fs.remove(this.tempDir);
       console.log('🧹 Cleaned up Claude Code SDK service temporary files');
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Warning: Failed to clean up temporary files:', error.message);
     }
   }

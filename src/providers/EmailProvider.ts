@@ -1,17 +1,33 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { Transporter } from 'nodemailer';
+
+interface EmailConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: {
+    user?: string;
+    pass?: string;
+  };
+}
+
+interface EmailTestResult {
+  success: boolean;
+  message: string;
+}
 
 /**
- * Service for sending email notifications
+ * Provider for sending email notifications
  */
-export class EmailService {
+export class EmailProvider {
+  private transporter: Transporter | null = null;
+
   constructor() {
-    this.transporter = null;
     this.setupTransporter();
   }
 
-  setupTransporter() {
+  private setupTransporter(): void {
     // Use environment variables for email configuration
-    const emailConfig = {
+    const emailConfig: EmailConfig = {
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.EMAIL_PORT || '587'),
       secure: process.env.EMAIL_SECURE === 'true',
@@ -40,7 +56,7 @@ export class EmailService {
   /**
    * Send authorization needed email
    */
-  async sendAuthorizationNeededEmail(userEmail, unauthorizedServers) {
+  async sendAuthorizationNeededEmail(userEmail: string, unauthorizedServers: string[]): Promise<void> {
     const subject = 'Authorization Required - AI Coding Agent';
     const htmlContent = this.buildAuthorizationEmailHTML(unauthorizedServers);
     const textContent = this.buildAuthorizationEmailText(unauthorizedServers);
@@ -51,7 +67,7 @@ export class EmailService {
   /**
    * Build HTML email content for authorization needed
    */
-  buildAuthorizationEmailHTML(unauthorizedServers) {
+  private buildAuthorizationEmailHTML(unauthorizedServers: string[]): string {
     const serverList = unauthorizedServers.map(server => 
       `<li><strong>${server}</strong></li>`
     ).join('');
@@ -106,7 +122,7 @@ export class EmailService {
   /**
    * Build text email content for authorization needed
    */
-  buildAuthorizationEmailText(unauthorizedServers) {
+  private buildAuthorizationEmailText(unauthorizedServers: string[]): string {
     const serverList = unauthorizedServers.map(server => `- ${server}`).join('\n');
 
     return `
@@ -130,7 +146,7 @@ Your AI Coding Agent
   /**
    * Send magic login link email
    */
-  async sendMagicLoginEmail(email, magicToken) {
+  async sendMagicLoginEmail(email: string, magicToken: string): Promise<void> {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const loginUrl = `${baseUrl}/auth/login?token=${magicToken}`;
     
@@ -144,7 +160,7 @@ Your AI Coding Agent
   /**
    * Build HTML email content for magic login
    */
-  buildMagicLoginEmailHTML(loginUrl) {
+  private buildMagicLoginEmailHTML(loginUrl: string): string {
     return `
       <html>
         <head>
@@ -207,7 +223,7 @@ Your AI Coding Agent
   /**
    * Build text email content for magic login
    */
-  buildMagicLoginEmailText(loginUrl) {
+  private buildMagicLoginEmailText(loginUrl: string): string {
     return `
 Login to AI Coding Agent
 
@@ -230,7 +246,7 @@ Your AI Coding Agent
   /**
    * Send email notification
    */
-  async sendEmail(to, subject, text, html) {
+  async sendEmail(to: string, subject: string, text: string, html: string): Promise<any> {
     if (!this.transporter) {
       // Log to console if no email configuration
       console.log('\n📧 EMAIL NOTIFICATION (would be sent to:', to, ')');
@@ -268,7 +284,7 @@ Your AI Coding Agent
   /**
    * Test email configuration
    */
-  async testEmailConfiguration() {
+  async testEmailConfiguration(): Promise<EmailTestResult> {
     if (!this.transporter) {
       return { success: false, message: 'No email configuration found' };
     }
@@ -277,7 +293,7 @@ Your AI Coding Agent
       await this.transporter.verify();
       return { success: true, message: 'Email configuration is valid' };
     } catch (error) {
-      return { success: false, message: error.message };
+      return { success: false, message: (error as Error).message };
     }
   }
 }

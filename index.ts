@@ -7,7 +7,7 @@
  * access tokens for MCP services.
  */
 
-import express from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,12 +16,13 @@ import { AuthManager } from './src/auth/AuthManager.js';
 import { AuthService } from './src/auth/AuthService.js';
 import { isServerAuthorized } from './src/auth/authUtils.js';
 import { PromptManager } from './src/prompts/PromptManager.js';
-import { ClaudeServiceFactory } from './src/services/ClaudeServiceFactory.js';
-import { EmailService } from './src/services/EmailService.js';
-import { WebUIService } from './src/services/WebUIService.js';
-import { ExecutionHistoryService } from './src/services/ExecutionHistoryService.js';
+import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
+import { EmailProvider } from './src/providers/EmailProvider.js';
+import { LegacyWebUIService } from './src/services/LegacyWebUIService.js';
+import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
 import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
 import { mergeParametersWithDefaults } from './public/js/prompt-utils.js';
+import { setupAllWebClientRoutes } from './src/services/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -30,34 +31,46 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 class AICodingAgent {
+  private app: Application;
+  private port: number;
+  private configManager: ConfigManager;
+  private authManager: AuthManager;
+  private promptManager: PromptManager;
+  private executionHistoryService: ExecutionHistoryProvider;
+  private claudeService: any;
+  private emailService: EmailProvider;
+  private authService: AuthService;
+  private webUIService: LegacyWebUIService;
+  private authMiddleware: AuthMiddleware;
+
   constructor() {
     this.app = express();
-    this.port = process.env.PORT || 3000;
+    this.port = parseInt(process.env.PORT || '3000');
     
     // Initialize services
     this.configManager = new ConfigManager();
     this.authManager = new AuthManager();
     this.promptManager = new PromptManager();
-    this.executionHistoryService = new ExecutionHistoryService();
-    this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
-    this.emailService = new EmailService();
+    this.executionHistoryService = new ExecutionHistoryProvider();
+    this.claudeService = ClaudeServiceProvider.create(this.executionHistoryService);
+    this.emailService = new EmailProvider();
     this.authService = new AuthService(this.emailService);
-    this.webUIService = new WebUIService();
-    this.authMiddleware = new AuthMiddleware(this.authService);
+    this.webUIService = new LegacyWebUIService();
+    this.authMiddleware = new AuthMiddleware(this.authService as any);
   }
 
   /**
    * Merge request parameters with default values from prompt schema
    * @deprecated Use shared utility from prompt-utils.js instead
    */
-  mergeParametersWithDefaults(prompt, requestParameters = {}) {
+  mergeParametersWithDefaults(prompt: any, requestParameters: any = {}): any {
     return mergeParametersWithDefaults(prompt, requestParameters);
   }
 
-  async initialize() {
+  async initialize(): Promise<void> {
     try {
       // Validate Claude service configuration
-      const serviceValidation = await ClaudeServiceFactory.validateConfiguration();
+      const serviceValidation = await ClaudeServiceProvider.validateConfiguration();
       console.log(`🔧 Claude Service: ${serviceValidation.serviceType}`);
       for (const message of serviceValidation.messages) {
         console.log(`   ${message}`);
@@ -65,12 +78,8 @@ class AICodingAgent {
       
       if (!serviceValidation.isValid) {
         console.error('❌ Claude service configuration is invalid');
-        const instructions = ClaudeServiceFactory.getConfigurationInstructions();
-        console.log('\\n📖 Configuration Instructions:');
-        console.log(`   ${instructions.title}`);
-        for (const instruction of instructions.instructions) {
-          console.log(`   ${instruction}`);
-        }
+        console.log('\n📖 Please check the documentation for setup instructions:');
+        console.log('   https://github.com/your-org/ai-coding-agent/docs');
         process.exit(1);
       }
       
@@ -91,13 +100,16 @@ class AICodingAgent {
     }
   }
 
-  setupMiddleware() {
+  setupMiddleware(): void {
     // Parse JSON bodies
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
     
-    // Serve static files
+    // Serve static files from public directory
     this.app.use('/static', express.static(path.join(__dirname, 'public')));
+    
+    // Serve built frontend static assets
+    this.app.use('/assets', express.static(path.join(__dirname, 'frontend/dist/assets')));
     
     // CORS for development
     this.app.use((req, res, next) => {
@@ -112,9 +124,29 @@ class AICodingAgent {
     });
   }
 
-  setupRoutes() {
+  setupRoutes(): void {
+    // Legacy routes FIRST - before any other middleware can interfere
+    // IMPORTANT: These routes must be defined first to prevent static file handling
+    this.app.get('/legacy/prompts/:promptName/activity.html', (req, res) => {
+      console.log('🔍 Legacy route hit for:', req.params.promptName);
+      const promptName = req.params.promptName;
+      this.webUIService.renderPromptActivityPage(req, res, {
+        promptName,
+        promptManager: this.promptManager,
+        executionHistoryService: this.executionHistoryService
+      });
+    });
+
+    // Test route to verify legacy routing works
+    this.app.get('/legacy/test', (req, res) => {
+      console.log('🔍 Legacy test route hit!');
+      res.send('<h1>Legacy route works!</h1><p>This confirms legacy routes are functioning.</p>');
+    });
+
     // Authentication routes
-    this.app.get('/login', (req, res) => {
+    // Note: /login route is now handled by React Router in the SPA
+    // The static login page is only served for non-browser requests or as fallback
+    this.app.get('/login-static', (req, res) => {
       this.webUIService.renderLoginPage(req, res);
     });
 
@@ -131,7 +163,7 @@ class AICodingAgent {
 
         const result = await this.authService.requestMagicLink(email);
         res.json(result);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Magic link request error:', error);
         res.status(400).json({ 
           error: 'Login request failed',
@@ -148,14 +180,14 @@ class AICodingAgent {
           return res.redirect('/login?error=invalid_token');
         }
 
-        const loginResult = await this.authService.verifyMagicLink(token);
+        const loginResult = await this.authService.verifyMagicLink(token as string);
         
         // Set session cookie
         this.authMiddleware.setSessionCookie(res, loginResult.sessionId);
         
         // Redirect to dashboard with success message
         res.redirect('/?success=login');
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Magic link verification error:', error);
         let errorCode = 'invalid_token';
         if (error.message.includes('expired')) {
@@ -179,34 +211,16 @@ class AICodingAgent {
       res.json({ success: true, message: 'Logged out successfully' });
     });
 
-    // Dashboard and protected routes
-    this.app.get('/', 
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        this.webUIService.renderIndexPage(req, res, {
-          prompts: this.promptManager.getPrompts(),
-          mcpServers: this.configManager.getMcpServers(),
-          authManager: this.authManager,
-          user: req.user
-        });
-      }
-    );
-
+    // Dashboard and protected routes are now handled by React Router
+    // Legacy routes for backwards compatibility (redirect to React app)
     this.app.get('/index.html', (req, res) => {
       res.redirect('/');
     });
 
-    // Prompt activity page
-    this.app.get('/prompts/:promptName/activity.html', 
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        this.webUIService.renderPromptActivityPage(req, res, {
-          promptName: req.params.promptName,
-          promptManager: this.promptManager,
-          executionHistoryService: this.executionHistoryService
-        });
-      }
-    );
+    // Legacy prompt activity page (redirect to React route)
+    this.app.get('/prompts/:promptName/activity.html', (req, res) => {
+      res.redirect(`/prompts/${req.params.promptName}/activity`);
+    });
 
     // MCP authorization endpoint
     this.app.post('/mcp/:mcpName/authorize',
@@ -222,7 +236,7 @@ class AICodingAgent {
           
           const authUrl = await this.authManager.initiateAuthorization(mcpServer);
           res.json({ authUrl });
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Authorization error:', error);
           res.status(500).json({ error: error.message });
         }
@@ -242,7 +256,7 @@ class AICodingAgent {
           
           await this.setupGitCredentials(token);
           res.json({ success: true, message: 'Git credentials configured successfully' });
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Git credentials setup error:', error);
           res.status(500).json({ error: error.message });
         }
@@ -253,7 +267,7 @@ class AICodingAgent {
     this.app.get('/oauth/callback', async (req, res) => {
       try {
         await this.authManager.handleOAuthCallback(req, res);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ OAuth callback error:', error);
         res.status(500).send('OAuth callback failed');
       }
@@ -276,7 +290,7 @@ class AICodingAgent {
           const parameters = this.mergeParametersWithDefaults(prompt, requestParameters);
 
           // Check if all required MCP servers are authorized
-          const unauthorizedServers = [];
+          const unauthorizedServers: string[] = [];
           for (const mcpServerName of prompt.mcp_servers) {
             const mcpServer = this.configManager.getMcpServer(mcpServerName);
             
@@ -293,7 +307,7 @@ class AICodingAgent {
             
             // Send email notification
             await this.emailService.sendAuthorizationNeededEmail(
-              process.env.EMAIL,
+              process.env.EMAIL || '',
               unauthorizedServers
             );
             
@@ -305,7 +319,7 @@ class AICodingAgent {
           }
 
           // Execute the prompt
-          const userEmail = req.user?.email || 'unknown';
+          const userEmail = (req as any).user?.email || 'unknown';
           await this.claudeService.executePromptStream(
             prompt,
             parameters,
@@ -315,7 +329,7 @@ class AICodingAgent {
             userEmail
           );
           
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Prompt execution error:', error);
           if (!res.headersSent) {
             res.status(500).json({ error: error.message });
@@ -324,159 +338,67 @@ class AICodingAgent {
       }
     );
 
-    // Execution history API endpoint
-    this.app.get('/api/executions',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        const limit = parseInt(req.query.limit) || 50;
-        const promptName = req.query.prompt;
-        
-        let history;
-        if (promptName) {
-          history = this.executionHistoryService.getPromptHistory(promptName, limit);
-        } else {
-          history = this.executionHistoryService.getAllHistory(limit);
-        }
-        
-        const stats = this.executionHistoryService.getStats();
-        
-        res.json({
-          stats,
-          executions: history
-        });
-      }
-    );
-
-    // Individual execution details API
-    this.app.get('/api/executions/:executionId',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        const execution = this.executionHistoryService.getExecution(req.params.executionId);
-        if (!execution) {
-          return res.status(404).json({ error: 'Execution not found' });
-        }
-        res.json(execution);
-      }
-    );
-
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    // Claude service management endpoints
-    this.app.get('/api/claude/service', (req, res) => {
-      const serviceType = ClaudeServiceFactory.getServiceType();
-      const capabilities = ClaudeServiceFactory.getServiceCapabilities();
+
+
+    // === WEB CLIENT SERVICE ROUTES ===
+    // Set up the new modular web client API routes
+    const webClientDeps = {
+      authService: this.authService,
+      authMiddleware: this.authMiddleware,
+      promptManager: this.promptManager,
+      configManager: this.configManager,
+      authManager: this.authManager,
+      executionHistoryService: this.executionHistoryService,
+      claudeService: this.claudeService,
+      emailService: this.emailService
+    };
+
+    // Wire up all the web client service routes (GET /api/user, /api/prompts, etc.)
+    setupAllWebClientRoutes(this.app, webClientDeps);
+
+    // Serve the React app for all non-API routes (SPA fallback)
+    // This must be the last route to catch all unmatched routes
+    this.app.get('*', (req, res) => {
+      // Skip API routes, auth routes, and static files
+      if (req.path.startsWith('/api/') || 
+          req.path.startsWith('/auth/') || 
+          req.path.startsWith('/mcp/') ||
+          req.path.startsWith('/oauth/') ||
+          req.path.startsWith('/prompt/') ||
+          req.path.startsWith('/legacy/') ||
+          req.path.startsWith('/static/') ||
+          req.path.startsWith('/assets/') ||
+          req.path === '/health' ||
+          req.path === '/login-static') {
+        return res.status(404).json({ error: 'Not found' });
+      }
       
-      res.json({
-        currentService: serviceType,
-        capabilities: capabilities[serviceType],
-        allCapabilities: capabilities
+      // Serve the React app
+      const frontendIndexPath = path.join(__dirname, 'frontend/dist/index.html');
+      res.sendFile(frontendIndexPath, (err) => {
+        if (err) {
+          console.error('Error serving React app:', err);
+          res.status(500).send('Error loading application');
+        }
       });
-    });
-
-    this.app.post('/api/claude/service/validate', async (req, res) => {
-      try {
-        const validation = await ClaudeServiceFactory.validateConfiguration();
-        res.json(validation);
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.post('/api/claude/service/switch', async (req, res) => {
-      try {
-        const { serviceType } = req.body;
-        
-        if (!serviceType || !['claude-sdk', 'claude-code'].includes(serviceType)) {
-          return res.status(400).json({ 
-            error: 'Invalid service type. Must be "claude-sdk" or "claude-code"' 
-          });
-        }
-
-        const result = await ClaudeServiceFactory.switchServiceType(serviceType);
-        
-        if (result.success) {
-          // Recreate the service instance
-          this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
-          console.log(`🔄 Switched Claude service to: ${serviceType}`);
-        }
-        
-        res.json(result);
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.get('/api/claude/service/instructions', (req, res) => {
-      const instructions = ClaudeServiceFactory.getConfigurationInstructions();
-      res.json(instructions);
-    });
-
-    // Claude Code specific endpoints (only available when using Claude Code)
-    this.app.get('/api/claude/mcp/servers', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const servers = await this.claudeService.listMcpServers();
-        res.json({ servers: servers.split('\n').filter(s => s.trim()) });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.post('/api/claude/mcp/servers', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const { name, config, scope = 'local' } = req.body;
-        
-        if (!name || !config) {
-          return res.status(400).json({ 
-            error: 'Server name and config are required' 
-          });
-        }
-
-        const result = await this.claudeService.addMcpServer(name, config, scope);
-        res.json(result);
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.delete('/api/claude/mcp/servers/:name', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const { name } = req.params;
-        const result = await this.claudeService.removeMcpServer(name);
-        res.json({ success: true, output: result });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
     });
   }
 
   /**
    * Setup git credentials for Claude Code operations
-   * @param {string} token - GitHub personal access token
+   * @param token - GitHub personal access token
    */
-  async setupGitCredentials(token) {
+  async setupGitCredentials(token: string): Promise<void> {
     const fs = await import('fs');
     const os = await import('os');
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
     
     // Determine the appropriate home directory
     const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
@@ -489,10 +411,14 @@ class AICodingAgent {
     // Write the credentials file
     await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
     
+    // Configure git to use the credential store
+    await execAsync('git config --global credential.helper store');
+    
     console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    console.log(`✅ Git credential helper configured to use store`);
   }
 
-  async start() {
+  async start(): Promise<void> {
     await this.initialize();
     
     this.app.listen(this.port, () => {

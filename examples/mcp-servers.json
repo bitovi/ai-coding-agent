@@ -17,16 +17,5 @@
     "tool_configuration": {
       "enabled": true
     }
-  },
-  {
-    "name": "local-files",
-    "type": "stdio",
-    "command": "mcp-server-local-files",
-    "args": [],
-    "authorization_token": "local_access_token",
-    "tool_configuration": {
-      "enabled": true,
-      "allowed_paths": ["/Users/username/projects"]
-    }
   }
 ]

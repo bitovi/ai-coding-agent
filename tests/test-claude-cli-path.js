@@ -4,16 +4,16 @@
  * Test script to validate Claude Code CLI path resolution
  */
 
-import { ClaudeCodeService } from '../src/services/ClaudeCodeService.js';
-import { ClaudeServiceFactory } from '../src/services/ClaudeServiceFactory.js';
+import { ClaudeCodeService } from '../src/services/claude/ClaudeCodeService.js';
+import { ClaudeServiceProvider } from '../src/providers/claude/ClaudeServiceProvider.js';
 
 async function testClaudeCommandPath() {
   console.log('🧪 Testing Claude Code CLI path resolution...\n');
 
   try {
     // Test factory availability check
-    console.log('1. Testing ClaudeServiceFactory.isClaudeCodeAvailable()...');
-    const isAvailable = await ClaudeServiceFactory.isClaudeCodeAvailable();
+    console.log('1. Testing ClaudeServiceProvider.isClaudeCodeAvailable()...');
+    const isAvailable = await ClaudeServiceProvider.isClaudeCodeAvailable();
     console.log(`   Result: ${isAvailable ? '✅ Available' : '❌ Not available'}\n`);
 
     if (!isAvailable) {

@@ -5,10 +5,15 @@
     "messages": [
       {
         "role": "user",
-        "content": "Hello Claude! Please respond with a friendly greeting and tell me you're working correctly.",
+        "content": "{{greeting}} Claude! Please respond with a friendly greeting and tell me you're working correctly.",
         "parameters": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "greeting": {
+              "type": "string",
+              "description": "A greeting to send to Claude"
+            }
+          },
           "required": []
         }
       }
@@ -54,7 +59,7 @@
     "messages": [
         {
             "role": "user",
-            "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder.",
+            "content": "Clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. If there's already a local copy in the current directory, update it to the latest version by running 'git pull' inside the repository folder. Use https methods that will work with a .git-credentials file.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -90,7 +95,7 @@
   },
   {
     "name": "code-review",
-    "mcp_servers": ["github", "local-files"],
+    "mcp_servers": ["github"],
     "messages": [
       {
         "role": "system",

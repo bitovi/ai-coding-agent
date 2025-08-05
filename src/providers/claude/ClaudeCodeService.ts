@@ -1,22 +1,54 @@
-import { spawn, exec } from 'child_process';
+import { spawn, exec, ChildProcess } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { promisify } from 'util';
-import { processPrompt } from '../../public/js/prompt-utils.js';
+import { Response } from 'express';
+import { processPrompt } from '../../../public/js/prompt-utils.js';
+import type { Prompt } from '../../types/index.js';
+import type { ExecutionHistoryProvider } from '../ExecutionHistoryProvider.js';
 
 const execAsync = promisify(exec);
+
+interface McpServerConfig {
+  type: 'stdio' | 'sse' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  authorization_token?: string;
+}
+
+interface McpServer {
+  name: string;
+  type: 'stdio' | 'sse' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  authorization_token?: string;
+}
+
+interface McpConfig {
+  mcpServers: Record<string, McpServerConfig>;
+}
 
 /**
  * Service for interacting with Claude Code CLI instead of the TypeScript SDK
  * Implements the same interface as ClaudeAnthropicSDK but uses `claude` CLI commands
  */
 export class ClaudeCodeService {
-  constructor(executionHistoryService = null) {
+  private executionHistoryService: ExecutionHistoryProvider | null;
+  private tempDir: string;
+  private mcpConfigPath: string;
+  private claudeCommandCache: string | null;
+
+  constructor(executionHistoryService: ExecutionHistoryProvider | null = null) {
     this.executionHistoryService = executionHistoryService;
     
     // Use WORKING_DIR environment variable if set, otherwise fall back to temp directory
-    let baseDir;
+    let baseDir: string;
     if (process.env.WORKING_DIR) {
       // Resolve relative paths to absolute paths
       baseDir = path.resolve(process.env.WORKING_DIR);
@@ -43,23 +75,23 @@ export class ClaudeCodeService {
    * Get the path to the Claude CLI command
    * @returns {Promise<string>} Path to claude command
    */
-  async getClaudeCommand() {
+  async getClaudeCommand(): Promise<string> {
     // Return cached result if available
     if (this.claudeCommandCache) {
       return this.claudeCommandCache;
     }
 
     const { access, constants } = await import('fs/promises');
-    const path = await import('path');
+    const pathModule = await import('path');
     
     // Try local installation first (node_modules) - use absolute path
-    const localPath = path.resolve('./node_modules/.bin/claude');
+    const localPath = pathModule.resolve('./node_modules/.bin/claude');
     try {
       await access(localPath, constants.F_OK | constants.X_OK);
       console.log('🔍 [DEBUG] Using local Claude installation:', localPath);
       this.claudeCommandCache = localPath;
       return localPath;
-    } catch (error) {
+    } catch (error: any) {
       console.log('🔍 [DEBUG] Local Claude not found:', error.message);
       
       // Local installation not found, try global
@@ -72,7 +104,7 @@ export class ClaudeCodeService {
           this.claudeCommandCache = globalPath;
           return globalPath;
         }
-      } catch (globalError) {
+      } catch (globalError: any) {
         console.log('🔍 [DEBUG] Global Claude not found:', globalError.message);
         
         // Last resort: try just 'claude' and let the system find it
@@ -92,11 +124,11 @@ export class ClaudeCodeService {
   /**
    * Validate that Claude Code CLI is available
    */
-  async validateCLI() {
+  async validateCLI(): Promise<void> {
     try {
       const claudeCmd = await this.getClaudeCommand();
       await execAsync(`${claudeCmd} --version`);
-    } catch (error) {
+    } catch (error: any) {
       throw new Error('Claude Code CLI is not installed or not in PATH. Please install with: npm install @anthropic-ai/claude-code');
     }
   }
@@ -104,20 +136,20 @@ export class ClaudeCodeService {
   /**
    * Set the execution history service (used during app initialization)
    */
-  setExecutionHistoryService(executionHistoryService) {
+  setExecutionHistoryService(executionHistoryService: ExecutionHistoryProvider): void {
     this.executionHistoryService = executionHistoryService;
   }
 
   /**
    * Configure MCP servers dynamically for Claude Code
    */
-  async configureMcpServers(mcpServers, authManager) {
-    const mcpConfig = {
+  async configureMcpServers(mcpServers: McpServer[], authManager: any): Promise<string> {
+    const mcpConfig: McpConfig = {
       mcpServers: {}
     };
 
     for (const server of mcpServers) {
-      const serverConfig = {
+      const serverConfig: McpServerConfig = {
         type: server.type
       };
 
@@ -158,8 +190,15 @@ export class ClaudeCodeService {
   /**
    * Execute a prompt with streaming response using Claude Code CLI
    */
-  async executePromptStream(prompt, parameters, configManager, authManager, res, userEmail = 'unknown') {
-    let executionId = null;
+  async executePromptStream(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any, 
+    res: Response, 
+    userEmail: string = 'unknown'
+  ): Promise<void> {
+    let executionId: string | null = null;
     
     try {
       console.log('🔍 [DEBUG] Starting executePromptStream...');
@@ -225,7 +264,7 @@ export class ClaudeCodeService {
       res.end();
       console.log('🔍 [DEBUG] executePromptStream completed successfully');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Claude Code execution error:', error);
       console.log('🔍 [DEBUG] Error in executePromptStream:', error.stack);
       
@@ -243,7 +282,7 @@ export class ClaudeCodeService {
   /**
    * Build prompt content from processed messages
    */
-  buildPromptContent(processedPrompt, mcpServers) {
+  buildPromptContent(processedPrompt: any, mcpServers: McpServer[]): string {
     let content = '';
     
     // Add system message if MCP servers are available
@@ -263,7 +302,7 @@ export class ClaudeCodeService {
   /**
    * Execute Claude Code CLI with streaming output
    */
-  async executeClaude(promptContent, res, executionId) {
+  async executeClaude(promptContent: string, res: Response, executionId: string | null): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         console.log('🔍 [DEBUG] Starting executeClaude...');
@@ -274,7 +313,7 @@ export class ClaudeCodeService {
         const { access, constants } = await import('fs/promises');
         try {
           await access(claudeCmd, constants.F_OK | constants.X_OK);
-        } catch (error) {
+        } catch (error: any) {
           throw new Error(`Claude Code not found or not executable: ${claudeCmd}`);
         }
         
@@ -319,10 +358,10 @@ export class ClaudeCodeService {
         // Write prompt content to stdin
         console.log('🔍 [DEBUG] Writing prompt to stdin...');
         try {
-          claudeProcess.stdin.write(promptContent);
-          claudeProcess.stdin.end();
+          claudeProcess.stdin!.write(promptContent);
+          claudeProcess.stdin!.end();
           console.log('🔍 [DEBUG] Prompt written to stdin and closed');
-        } catch (stdinError) {
+        } catch (stdinError: any) {
           console.error('🔍 [DEBUG] Error writing to stdin:', stdinError);
           claudeProcess.kill('SIGTERM');
           reject(new Error(`Failed to write prompt to Claude Code stdin: ${stdinError.message}`));
@@ -330,7 +369,7 @@ export class ClaudeCodeService {
         }
         
         // Handle stdin errors
-        claudeProcess.stdin.on('error', (stdinError) => {
+        claudeProcess.stdin!.on('error', (stdinError) => {
           console.error('🔍 [DEBUG] stdin error:', stdinError);
           if (!claudeProcess.killed) {
             claudeProcess.kill('SIGTERM');
@@ -338,186 +377,187 @@ export class ClaudeCodeService {
           }
         });
       
-      let accumulatedData = '';
-      let messageStarted = false;
-      let dataReceived = false;
-      let contentBlockStarted = false;
+        let accumulatedData = '';
+        let messageStarted = false;
+        let dataReceived = false;
+        let contentBlockStarted = false;
+        let timeout: NodeJS.Timeout;
 
-      claudeProcess.stdout.on('data', (data) => {
-        console.log('🔍 [DEBUG] stdout data received, length:', data.length);
-        console.log('🔍 [DEBUG] stdout data preview:', data.toString().substring(0, 200) + '...');
-        dataReceived = true;
-        const chunk = data.toString();
-        accumulatedData += chunk;
-        
-        console.log('🔍 [DEBUG] Processing chunk, accumulated length:', accumulatedData.length);
-        
-        // Process complete JSON lines (split on actual newlines, not escaped)
-        const lines = accumulatedData.split('\n');
-        accumulatedData = lines.pop(); // Keep incomplete line
-        
-        console.log('🔍 [DEBUG] Found', lines.length, 'complete lines to process');
-        
-        for (const line of lines) {
-          if (line.trim()) {
-            console.log('🔍 [DEBUG] Processing line:', line.substring(0, 200) + '...');
-            
-            let processedAsJson = false;
-            
-            // Try to parse as JSON first
-            try {
-              const jsonData = JSON.parse(line);
-              console.log('🔍 [DEBUG] Parsed JSON type:', jsonData.type || 'unknown type');
-              console.log('🔍 [DEBUG] Parsed JSON keys:', Object.keys(jsonData));
+        claudeProcess.stdout!.on('data', (data) => {
+          console.log('🔍 [DEBUG] stdout data received, length:', data.length);
+          console.log('🔍 [DEBUG] stdout data preview:', data.toString().substring(0, 200) + '...');
+          dataReceived = true;
+          const chunk = data.toString();
+          accumulatedData += chunk;
+          
+          console.log('🔍 [DEBUG] Processing chunk, accumulated length:', accumulatedData.length);
+          
+          // Process complete JSON lines (split on actual newlines, not escaped)
+          const lines = accumulatedData.split('\n');
+          accumulatedData = lines.pop() || ''; // Keep incomplete line
+          
+          console.log('🔍 [DEBUG] Found', lines.length, 'complete lines to process');
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              console.log('🔍 [DEBUG] Processing line:', line.substring(0, 200) + '...');
               
-              // Only process if it's a valid Claude Code JSON response
-              if (jsonData.type || jsonData.role || jsonData.message) {
-                this.handleClaudeCodeOutput(jsonData, res, executionId);
-                processedAsJson = true;
+              let processedAsJson = false;
+              
+              // Try to parse as JSON first
+              try {
+                const jsonData = JSON.parse(line);
+                console.log('🔍 [DEBUG] Parsed JSON type:', jsonData.type || 'unknown type');
+                console.log('🔍 [DEBUG] Parsed JSON keys:', Object.keys(jsonData));
                 
-                // Track if we've started receiving message content - check for various content types
-                if (jsonData.type === 'assistant' || 
-                    jsonData.type === 'result' || 
-                    jsonData.type === 'content' || 
-                    jsonData.type === 'text' || 
-                    jsonData.type === 'message_delta' ||
-                    (jsonData.role === 'assistant' && jsonData.content)) {
-                  if (!messageStarted) {
-                    console.log('🔍 [DEBUG] Starting message output via JSON...');
-                    messageStarted = true;
-                    this.sendSSEEvent(res, 'message_start', {
-                      message: { role: 'assistant', content: [] }
-                    });
-                  }
-                  if (!contentBlockStarted) {
-                    console.log('🔍 [DEBUG] Starting content block...');
-                    contentBlockStarted = true;
-                    this.sendSSEEvent(res, 'content_block_start', {
-                      index: 0,
-                      content_block: { type: 'text', text: '' }
-                    });
+                // Only process if it's a valid Claude Code JSON response
+                if (jsonData.type || jsonData.role || jsonData.message) {
+                  this.handleClaudeCodeOutput(jsonData, res, executionId);
+                  processedAsJson = true;
+                  
+                  // Track if we've started receiving message content - check for various content types
+                  if (jsonData.type === 'assistant' || 
+                      jsonData.type === 'result' || 
+                      jsonData.type === 'content' || 
+                      jsonData.type === 'text' || 
+                      jsonData.type === 'message_delta' ||
+                      (jsonData.role === 'assistant' && jsonData.content)) {
+                    if (!messageStarted) {
+                      console.log('🔍 [DEBUG] Starting message output via JSON...');
+                      messageStarted = true;
+                      this.sendSSEEvent(res, 'message_start', {
+                        message: { role: 'assistant', content: [] }
+                      });
+                    }
+                    if (!contentBlockStarted) {
+                      console.log('🔍 [DEBUG] Starting content block...');
+                      contentBlockStarted = true;
+                      this.sendSSEEvent(res, 'content_block_start', {
+                        index: 0,
+                        content_block: { type: 'text', text: '' }
+                      });
+                    }
                   }
                 }
+                
+              } catch (error) {
+                console.log('🔍 [DEBUG] JSON parse error:', (error as Error).message);
+                // Will be processed as plain text below
               }
               
-            } catch (error) {
-              console.log('🔍 [DEBUG] JSON parse error:', error.message);
-              // Will be processed as plain text below
-            }
-            
-            // Only process as plain text if it wasn't successfully processed as JSON
-            if (!processedAsJson && line.trim()) {
-              console.log('🔍 [DEBUG] Processing as plain text:', JSON.stringify(line));
-              this.handlePlainTextOutput(line, res, executionId, messageStarted);
-              
-              if (!messageStarted) {
-                console.log('🔍 [DEBUG] Starting plain text message output...');
-                messageStarted = true;
-                this.sendSSEEvent(res, 'message_start', {
-                  message: { role: 'assistant', content: [] }
-                });
-              }
-              if (!contentBlockStarted) {
-                console.log('🔍 [DEBUG] Starting content block for plain text...');
-                contentBlockStarted = true;
-                this.sendSSEEvent(res, 'content_block_start', {
-                  index: 0,
-                  content_block: { type: 'text', text: '' }
-                });
+              // Only process as plain text if it wasn't successfully processed as JSON
+              if (!processedAsJson && line.trim()) {
+                console.log('🔍 [DEBUG] Processing as plain text:', JSON.stringify(line));
+                this.handlePlainTextOutput(line, res, executionId, messageStarted);
+                
+                if (!messageStarted) {
+                  console.log('🔍 [DEBUG] Starting plain text message output...');
+                  messageStarted = true;
+                  this.sendSSEEvent(res, 'message_start', {
+                    message: { role: 'assistant', content: [] }
+                  });
+                }
+                if (!contentBlockStarted) {
+                  console.log('🔍 [DEBUG] Starting content block for plain text...');
+                  contentBlockStarted = true;
+                  this.sendSSEEvent(res, 'content_block_start', {
+                    index: 0,
+                    content_block: { type: 'text', text: '' }
+                  });
+                }
               }
             }
           }
-        }
-      });
-
-      claudeProcess.stderr.on('data', (data) => {
-        const errorMsg = data.toString();
-        console.log('🔍 [DEBUG] stderr received:', errorMsg);
-        console.error('Claude Code stderr:', errorMsg);
-        
-        // Check for critical errors that should terminate the process
-        if (errorMsg.includes('command not found') || 
-            errorMsg.includes('permission denied') ||
-            errorMsg.includes('No such file') ||
-            errorMsg.includes('ENOENT')) {
-          console.error('🔍 [DEBUG] Critical error detected, terminating process');
-          claudeProcess.kill('SIGTERM');
-          reject(new Error(`Claude Code critical error: ${errorMsg.trim()}`));
-          return;
-        }
-        
-        // Send as a status update rather than error to keep stream alive
-        this.sendSSEEvent(res, 'status', { 
-          message: `Claude Code: ${errorMsg.trim()}`,
-          type: 'stderr'
         });
-      });
 
-      claudeProcess.on('close', (code) => {
-        console.log('🔍 [DEBUG] Process closed with code:', code);
-        console.log('🔍 [DEBUG] Data received:', dataReceived);
-        console.log('🔍 [DEBUG] Message started:', messageStarted);
-        console.log('🔍 [DEBUG] Content block started:', contentBlockStarted);
-        
-        // Clear timeout if it exists
-        if (timeout) {
-          clearTimeout(timeout);
-        }
-        
-        if (contentBlockStarted) {
-          this.sendSSEEvent(res, 'content_block_stop', { index: 0 });
-        }
-        if (messageStarted) {
-          this.sendSSEEvent(res, 'message_stop', {});
-        }
-        
-        if (code === 0) {
-          console.log('🔍 [DEBUG] Resolving promise with success');
-          resolve();
-        } else {
-          console.log('🔍 [DEBUG] Rejecting promise with error code:', code);
-          const errorMessage = `Claude Code process exited with code ${code}`;
-          console.error('❌', errorMessage);
-          reject(new Error(errorMessage));
-        }
-      });
-
-      claudeProcess.on('error', (error) => {
-        console.log('🔍 [DEBUG] Process error:', error.message);
-        console.error('❌ Failed to start Claude Code process:', error);
-        
-        // Clear timeout if it exists
-        if (timeout) {
-          clearTimeout(timeout);
-        }
-        
-        reject(new Error(`Failed to start Claude Code: ${error.message}`));
-      });
-      
-      // Add timeout to detect hanging processes (configurable via CLAUDE_CODE_TIMEOUT_MS)
-      const timeoutMs = parseInt(process.env.CLAUDE_CODE_TIMEOUT_MS) || 1800000; // Default 30 minutes
-      const timeoutMinutes = Math.round(timeoutMs / 60000);
-      
-      console.log(`🔍 [DEBUG] Setting Claude Code timeout to ${timeoutMinutes} minutes (${timeoutMs}ms)`);
-      
-      const timeout = setTimeout(() => {
-        console.log('🔍 [DEBUG] Process timeout - killing process');
-        console.error(`❌ Claude Code process timed out after ${timeoutMinutes} minutes`);
-        claudeProcess.kill('SIGTERM');
-        
-        // Give it a moment to terminate gracefully, then force kill
-        setTimeout(() => {
-          if (!claudeProcess.killed) {
-            console.log('🔍 [DEBUG] Force killing process with SIGKILL');
-            claudeProcess.kill('SIGKILL');
+        claudeProcess.stderr!.on('data', (data) => {
+          const errorMsg = data.toString();
+          console.log('🔍 [DEBUG] stderr received:', errorMsg);
+          console.error('Claude Code stderr:', errorMsg);
+          
+          // Check for critical errors that should terminate the process
+          if (errorMsg.includes('command not found') || 
+              errorMsg.includes('permission denied') ||
+              errorMsg.includes('No such file') ||
+              errorMsg.includes('ENOENT')) {
+            console.error('🔍 [DEBUG] Critical error detected, terminating process');
+            claudeProcess.kill('SIGTERM');
+            reject(new Error(`Claude Code critical error: ${errorMsg.trim()}`));
+            return;
           }
-        }, 5000);
+          
+          // Send as a status update rather than error to keep stream alive
+          this.sendSSEEvent(res, 'status', { 
+            message: `Claude Code: ${errorMsg.trim()}`,
+            type: 'stderr'
+          });
+        });
+
+        claudeProcess.on('close', (code) => {
+          console.log('🔍 [DEBUG] Process closed with code:', code);
+          console.log('🔍 [DEBUG] Data received:', dataReceived);
+          console.log('🔍 [DEBUG] Message started:', messageStarted);
+          console.log('🔍 [DEBUG] Content block started:', contentBlockStarted);
+          
+          // Clear timeout if it exists
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          
+          if (contentBlockStarted) {
+            this.sendSSEEvent(res, 'content_block_stop', { index: 0 });
+          }
+          if (messageStarted) {
+            this.sendSSEEvent(res, 'message_stop', {});
+          }
+          
+          if (code === 0) {
+            console.log('🔍 [DEBUG] Resolving promise with success');
+            resolve();
+          } else {
+            console.log('🔍 [DEBUG] Rejecting promise with error code:', code);
+            const errorMessage = `Claude Code process exited with code ${code}`;
+            console.error('❌', errorMessage);
+            reject(new Error(errorMessage));
+          }
+        });
+
+        claudeProcess.on('error', (error) => {
+          console.log('🔍 [DEBUG] Process error:', error.message);
+          console.error('❌ Failed to start Claude Code process:', error);
+          
+          // Clear timeout if it exists
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          
+          reject(new Error(`Failed to start Claude Code: ${error.message}`));
+        });
         
-        reject(new Error(`Claude Code process timed out after ${timeoutMinutes} minutes`));
-      }, timeoutMs);
-      
+        // Add timeout to detect hanging processes (configurable via CLAUDE_CODE_TIMEOUT_MS)
+        const timeoutMs = parseInt(process.env.CLAUDE_CODE_TIMEOUT_MS || '1800000'); // Default 30 minutes
+        const timeoutMinutes = Math.round(timeoutMs / 60000);
+        
+        console.log(`🔍 [DEBUG] Setting Claude Code timeout to ${timeoutMinutes} minutes (${timeoutMs}ms)`);
+        
+        timeout = setTimeout(() => {
+          console.log('🔍 [DEBUG] Process timeout - killing process');
+          console.error(`❌ Claude Code process timed out after ${timeoutMinutes} minutes`);
+          claudeProcess.kill('SIGTERM');
+          
+          // Give it a moment to terminate gracefully, then force kill
+          setTimeout(() => {
+            if (!claudeProcess.killed) {
+              console.log('🔍 [DEBUG] Force killing process with SIGKILL');
+              claudeProcess.kill('SIGKILL');
+            }
+          }, 5000);
+          
+          reject(new Error(`Claude Code process timed out after ${timeoutMinutes} minutes`));
+        }, timeoutMs);
+        
       } catch (error) {
-        console.log('🔍 [DEBUG] Outer catch error:', error.message);
+        console.log('🔍 [DEBUG] Outer catch error:', (error as Error).message);
         reject(error);
       }
     });
@@ -526,7 +566,7 @@ export class ClaudeCodeService {
   /**
    * Handle structured JSON output from Claude Code
    */
-  handleClaudeCodeOutput(jsonData, res, executionId) {
+  handleClaudeCodeOutput(jsonData: any, res: Response, executionId: string | null): void {
     // Record in execution history
     if (this.executionHistoryService && executionId) {
       this.executionHistoryService.addMessage(executionId, 'claude_code_output', jsonData);
@@ -659,7 +699,7 @@ export class ClaudeCodeService {
   /**
    * Handle plain text output from Claude Code
    */
-  handlePlainTextOutput(text, res, executionId, messageStarted) {
+  handlePlainTextOutput(text: string, res: Response, executionId: string | null, messageStarted: boolean): void {
     // Record in execution history
     if (this.executionHistoryService && executionId) {
       this.executionHistoryService.addMessage(executionId, 'text_output', { text });
@@ -676,14 +716,14 @@ export class ClaudeCodeService {
    * Process prompt messages for parameter substitution
    * @deprecated Use shared utility from prompt-utils.js instead
    */
-  processPrompt(prompt, parameters) {
+  processPrompt(prompt: Prompt, parameters: Record<string, any>): any {
     return processPrompt(prompt, parameters);
   }
 
   /**
    * Build system message for Claude
    */
-  buildSystemMessage(mcpServers) {
+  buildSystemMessage(mcpServers: McpServer[]): string {
     const serverNames = mcpServers.map(s => s.name).join(', ');
     return `You have access to the following MCP services: ${serverNames}. Use these tools to help the user accomplish their goals.`;
   }
@@ -691,7 +731,7 @@ export class ClaudeCodeService {
   /**
    * Send Server-Sent Event
    */
-  sendSSEEvent(res, event, data) {
+  sendSSEEvent(res: Response, event: string, data: any): void {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
@@ -699,7 +739,12 @@ export class ClaudeCodeService {
   /**
    * Execute a prompt without streaming (for testing/debugging)
    */
-  async executePrompt(prompt, parameters, configManager, authManager) {
+  async executePrompt(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any
+  ): Promise<any> {
     const processedPrompt = processPrompt(prompt, parameters);
     const mcpServers = configManager.prepareMcpServersForClaude(
       prompt.mcp_servers, 
@@ -745,7 +790,7 @@ export class ClaudeCodeService {
           role: 'assistant'
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Claude Code execution failed: ${error.message}`);
     }
   }
@@ -753,12 +798,12 @@ export class ClaudeCodeService {
   /**
    * Add MCP server dynamically to Claude Code
    */
-  async addMcpServer(serverName, serverConfig, scope = 'local') {
+  async addMcpServer(serverName: string, serverConfig: McpServerConfig, scope: string = 'local'): Promise<any> {
     const args = ['mcp', 'add', '-s', scope, serverName];
     
     if (serverConfig.type === 'stdio') {
       args.push('--');
-      args.push(serverConfig.command);
+      args.push(serverConfig.command!);
       if (serverConfig.args) {
         args.push(...serverConfig.args);
       }
@@ -771,7 +816,7 @@ export class ClaudeCodeService {
       }
     } else if (serverConfig.type === 'sse') {
       args.splice(2, 0, '--transport', 'sse');
-      args.push(serverConfig.url);
+      args.push(serverConfig.url!);
       
       // Add headers for authorization
       if (serverConfig.headers) {
@@ -781,7 +826,7 @@ export class ClaudeCodeService {
       }
     } else if (serverConfig.type === 'http') {
       args.splice(2, 0, '--transport', 'http');
-      args.push(serverConfig.url);
+      args.push(serverConfig.url!);
       
       // Add headers for authorization
       if (serverConfig.headers) {
@@ -796,7 +841,7 @@ export class ClaudeCodeService {
       const { stdout, stderr } = await execAsync(`${claudeCmd} ${args.join(' ')}`);
       console.log(`✅ Added MCP server: ${serverName}`);
       return { success: true, stdout, stderr };
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Failed to add MCP server ${serverName}:`, error.message);
       throw error;
     }
@@ -805,12 +850,12 @@ export class ClaudeCodeService {
   /**
    * List configured MCP servers in Claude Code
    */
-  async listMcpServers() {
+  async listMcpServers(): Promise<string> {
     try {
       const claudeCmd = await this.getClaudeCommand();
       const { stdout } = await execAsync(`${claudeCmd} mcp list`);
       return stdout.trim();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to list MCP servers:', error.message);
       throw error;
     }
@@ -819,13 +864,13 @@ export class ClaudeCodeService {
   /**
    * Remove MCP server from Claude Code
    */
-  async removeMcpServer(serverName) {
+  async removeMcpServer(serverName: string): Promise<string> {
     try {
       const claudeCmd = await this.getClaudeCommand();
       const { stdout } = await execAsync(`${claudeCmd} mcp remove ${serverName}`);
       console.log(`🗑️  Removed MCP server: ${serverName}`);
       return stdout.trim();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Failed to remove MCP server ${serverName}:`, error.message);
       throw error;
     }
@@ -834,7 +879,7 @@ export class ClaudeCodeService {
   /**
    * Clear the cached Claude command path (useful for testing or if installation changes)
    */
-  clearClaudeCommandCache() {
+  clearClaudeCommandCache(): void {
     this.claudeCommandCache = null;
     console.log('🔍 [DEBUG] Claude command cache cleared');
   }
@@ -842,11 +887,11 @@ export class ClaudeCodeService {
   /**
    * Clean up temporary files
    */
-  async cleanup() {
+  async cleanup(): Promise<void> {
     try {
       await fs.remove(this.tempDir);
       console.log('🧹 Cleaned up Claude Code service temporary files');
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Warning: Failed to clean up temporary files:', error.message);
     }
   }
