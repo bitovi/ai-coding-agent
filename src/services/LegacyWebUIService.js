@@ -3,9 +3,10 @@ import { isServerAuthorized } from '../auth/authUtils.js';
 import { isConnectionAvailable, getAllConnectionStatuses } from '../auth/connectionValidators.js';
 
 /**
- * Service for rendering web UI pages
+ * Legacy service for rendering web UI pages
+ * @deprecated Use React frontend instead
  */
-export class WebUIService {
+export class LegacyWebUIService {
   constructor() {
     this.baseHTML = this.getBaseHTML();
   }

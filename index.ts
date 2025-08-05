@@ -16,13 +16,13 @@ import { AuthManager } from './src/auth/AuthManager.js';
 import { AuthService } from './src/auth/AuthService.js';
 import { isServerAuthorized } from './src/auth/authUtils.js';
 import { PromptManager } from './src/prompts/PromptManager.js';
-import { ClaudeServiceFactory } from './src/services/ClaudeServiceFactory.js';
-import { EmailService } from './src/services/EmailService.js';
-import { WebUIService } from './src/services/WebUIService.js';
-import { ExecutionHistoryService } from './src/services/ExecutionHistoryService.js';
+import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
+import { EmailProvider } from './src/providers/EmailProvider.js';
+import { LegacyWebUIService } from './src/services/LegacyWebUIService.js';
+import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
 import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
 import { mergeParametersWithDefaults } from './public/js/prompt-utils.js';
-import { setupAllWebClientRoutes } from './src/services/web-client-services/index.js';
+import { setupAllWebClientRoutes } from './src/services/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -36,11 +36,11 @@ class AICodingAgent {
   private configManager: ConfigManager;
   private authManager: AuthManager;
   private promptManager: PromptManager;
-  private executionHistoryService: ExecutionHistoryService;
+  private executionHistoryService: ExecutionHistoryProvider;
   private claudeService: any;
-  private emailService: EmailService;
+  private emailService: EmailProvider;
   private authService: AuthService;
-  private webUIService: WebUIService;
+  private webUIService: LegacyWebUIService;
   private authMiddleware: AuthMiddleware;
 
   constructor() {
@@ -51,11 +51,11 @@ class AICodingAgent {
     this.configManager = new ConfigManager();
     this.authManager = new AuthManager();
     this.promptManager = new PromptManager();
-    this.executionHistoryService = new ExecutionHistoryService();
-    this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
-    this.emailService = new EmailService();
+    this.executionHistoryService = new ExecutionHistoryProvider();
+    this.claudeService = ClaudeServiceProvider.create(this.executionHistoryService);
+    this.emailService = new EmailProvider();
     this.authService = new AuthService(this.emailService);
-    this.webUIService = new WebUIService();
+    this.webUIService = new LegacyWebUIService();
     this.authMiddleware = new AuthMiddleware(this.authService as any);
   }
 
@@ -70,7 +70,7 @@ class AICodingAgent {
   async initialize(): Promise<void> {
     try {
       // Validate Claude service configuration
-      const serviceValidation = await ClaudeServiceFactory.validateConfiguration();
+      const serviceValidation = await ClaudeServiceProvider.validateConfiguration();
       console.log(`🔧 Claude Service: ${serviceValidation.serviceType}`);
       for (const message of serviceValidation.messages) {
         console.log(`   ${message}`);
@@ -78,12 +78,8 @@ class AICodingAgent {
       
       if (!serviceValidation.isValid) {
         console.error('❌ Claude service configuration is invalid');
-        const instructions = ClaudeServiceFactory.getConfigurationInstructions();
-        console.log('\\n📖 Configuration Instructions:');
-        console.log(`   ${instructions.title}`);
-        for (const instruction of instructions.instructions) {
-          console.log(`   ${instruction}`);
-        }
+        console.log('\n📖 Please check the documentation for setup instructions:');
+        console.log('   https://github.com/your-org/ai-coding-agent/docs');
         process.exit(1);
       }
       
@@ -342,150 +338,12 @@ class AICodingAgent {
       }
     );
 
-    // Execution history API endpoint
-    this.app.get('/api/executions',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        const limit = parseInt(req.query.limit as string) || 50;
-        const promptName = req.query.prompt as string;
-        
-        let history;
-        if (promptName) {
-          history = this.executionHistoryService.getPromptHistory(promptName, limit);
-        } else {
-          history = this.executionHistoryService.getAllHistory(limit);
-        }
-        
-        const stats = this.executionHistoryService.getStats();
-        
-        res.json({
-          stats,
-          executions: history
-        });
-      }
-    );
-
-    // Individual execution details API
-    this.app.get('/api/executions/:executionId',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      (req, res) => {
-        const execution = this.executionHistoryService.getExecution(req.params.executionId);
-        if (!execution) {
-          return res.status(404).json({ error: 'Execution not found' });
-        }
-        res.json(execution);
-      }
-    );
-
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    // Claude service management endpoints
-    this.app.get('/api/claude/service', (req, res) => {
-      const serviceType = ClaudeServiceFactory.getServiceType();
-      const capabilities = ClaudeServiceFactory.getServiceCapabilities();
-      
-      res.json({
-        currentService: serviceType,
-        capabilities: capabilities[serviceType],
-        allCapabilities: capabilities
-      });
-    });
 
-    this.app.post('/api/claude/service/validate', async (req, res) => {
-      try {
-        const validation = await ClaudeServiceFactory.validateConfiguration();
-        res.json(validation);
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.post('/api/claude/service/switch', async (req, res) => {
-      try {
-        const { serviceType } = req.body;
-        
-        if (!serviceType || !['claude-sdk', 'claude-code'].includes(serviceType)) {
-          return res.status(400).json({ 
-            error: 'Invalid service type. Must be "claude-sdk" or "claude-code"' 
-          });
-        }
-
-        const result = await ClaudeServiceFactory.switchServiceType(serviceType);
-        
-        if (result.success) {
-          // Recreate the service instance
-          this.claudeService = ClaudeServiceFactory.create(this.executionHistoryService);
-          console.log(`🔄 Switched Claude service to: ${serviceType}`);
-        }
-        
-        res.json(result);
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.get('/api/claude/service/instructions', (req, res) => {
-      const instructions = ClaudeServiceFactory.getConfigurationInstructions();
-      res.json(instructions);
-    });
-
-    // Claude Code specific endpoints (only available when using Claude Code)
-    this.app.get('/api/claude/mcp/servers', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const servers = await this.claudeService.listMcpServers();
-        res.json({ servers: servers.split('\n').filter((s: string) => s.trim()) });
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.post('/api/claude/mcp/servers', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const { name, config, scope = 'local' } = req.body;
-        
-        if (!name || !config) {
-          return res.status(400).json({ 
-            error: 'Server name and config are required' 
-          });
-        }
-
-        const result = await this.claudeService.addMcpServer(name, config, scope);
-        res.json(result);
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.delete('/api/claude/mcp/servers/:name', async (req, res) => {
-      if (ClaudeServiceFactory.getServiceType() !== 'claude-code') {
-        return res.status(400).json({ 
-          error: 'MCP server management only available with Claude Code service' 
-        });
-      }
-
-      try {
-        const { name } = req.params;
-        const result = await this.claudeService.removeMcpServer(name);
-        res.json({ success: true, output: result });
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
 
     // === WEB CLIENT SERVICE ROUTES ===
     // Set up the new modular web client API routes
@@ -538,6 +396,9 @@ class AICodingAgent {
   async setupGitCredentials(token: string): Promise<void> {
     const fs = await import('fs');
     const os = await import('os');
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
     
     // Determine the appropriate home directory
     const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
@@ -550,7 +411,11 @@ class AICodingAgent {
     // Write the credentials file
     await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
     
+    // Configure git to use the credential store
+    await execAsync('git config --global credential.helper store');
+    
     console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    console.log(`✅ Git credential helper configured to use store`);
   }
 
   async start(): Promise<void> {

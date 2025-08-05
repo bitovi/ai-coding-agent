@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { User } from '../../types/index.js';
+import type { User } from '../types/index.js';
 import { getUserInfo } from './user.js';
 import type { Dependencies } from './common.js';
 
@@ -59,7 +59,7 @@ describe('getUserInfo', () => {
     });
   });
 
-  it('should redirect to login for browser requests when user is not authenticated', () => {
+  it('should return 401 JSON response for browser requests when user is not authenticated (API endpoint always returns JSON)', () => {
     // Arrange
     const commonModule = require('./common.js');
     mockReq.user = undefined;
@@ -69,9 +69,13 @@ describe('getUserInfo', () => {
     getUserInfo(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
-    expect(mockRes.redirect).toHaveBeenCalledWith('/login');
-    expect(mockRes.json).not.toHaveBeenCalled();
-    expect(commonModule.isBrowserRequest).toHaveBeenCalledWith(mockReq);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      error: 'Unauthorized',
+      message: 'Login required',
+      loginUrl: '/login'
+    });
+    expect(mockRes.redirect).not.toHaveBeenCalled();
+    // Note: isBrowserRequest is not called since /api/user always returns JSON
   });
 
   it('should return 401 JSON response for API requests when user is not authenticated', () => {
@@ -96,7 +100,7 @@ describe('getUserInfo', () => {
   it('should handle null user object', () => {
     // Arrange
     const commonModule = require('./common.js');
-    mockReq.user = null;
+    mockReq.user = undefined;
     commonModule.isBrowserRequest.mockReturnValue(false);
 
     // Act

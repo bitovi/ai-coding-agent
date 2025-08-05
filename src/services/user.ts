@@ -1,8 +1,9 @@
 import type { Request, Response, Express } from 'express';
-import type { User, ApiResponse } from '../../types/index.js';
-import { handleError, isBrowserRequest, type Dependencies } from './common.js';
+import type { User, ApiResponse } from '../types/index.js';
+import { handleError, isBrowserRequest } from './common.js';
 
-export function getUserInfo(deps: Dependencies = {}) {
+// getUserInfo doesn't need any dependencies since it just reads from req.user
+export function getUserInfo(deps: {} = {}) {
   return (req: Request, res: Response) => {
     try {
       const user = req.user;
@@ -35,7 +36,13 @@ export function getUserInfo(deps: Dependencies = {}) {
  * @param app - Express application instance
  * @param deps - Dependencies for dependency injection
  */
-export function setupUserRoutes(app: Express, deps: Dependencies = {}) {
+interface SetupUserRoutesDeps {
+  authMiddleware?: {
+    authenticate: (req: Request, res: Response, next: () => void) => void;
+  };
+}
+
+export function setupUserRoutes(app: Express, deps: SetupUserRoutesDeps = {}) {
   // GET /api/user - Get current authenticated user information
   app.get('/api/user', (req, res) => {
     const authMiddleware = deps.authMiddleware;

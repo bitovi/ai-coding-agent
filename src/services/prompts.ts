@@ -1,22 +1,33 @@
 import type { Request, Response, Express } from 'express';
-import type { Prompt, Connection, ApiResponse } from '../../types/index.js';
+import type { Prompt, Connection, ApiResponse } from '../types/index.js';
 import { 
   handleError, 
   checkConnectionAvailability, 
   getConnectionDescription, 
-  getConnectionMethod,
-  type Dependencies 
+  getConnectionMethod
 } from './common.js';
-import { mergeParametersWithDefaults, processPrompt } from '../../../public/js/prompt-utils.js';
-import { isServerAuthorized } from '../../auth/authUtils.js';
+import { mergeParametersWithDefaults, processPrompt } from '../../public/js/prompt-utils.js';
+import { isServerAuthorized } from '../auth/authUtils.js';
 
-export function getPrompts(deps: Dependencies = {}) {
+export interface GetPromptsDeps {
+  promptManager: {
+    getPrompts: () => any[];
+  };
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  authManager: {
+    isAuthorized: (serverName: string) => boolean;
+  };
+}
+
+export function getPrompts(deps: GetPromptsDeps) {
   const { promptManager, configManager, authManager } = deps;
   
   return (req: Request, res: Response) => {
     try {
-      const prompts = promptManager?.getPrompts() || [];
-      const mcpServers = configManager?.getMcpServers() || [];
+      const prompts = promptManager.getPrompts() || [];
+      const mcpServers = configManager.getMcpServers() || [];
 
       const promptsWithConnections = prompts.map((prompt: any) => {
         const connections: Connection[] = [];
@@ -25,7 +36,7 @@ export function getPrompts(deps: Dependencies = {}) {
         if (prompt.mcp_servers) {
           prompt.mcp_servers.forEach((serverName: string) => {
             const server = mcpServers.find((s: any) => s.name === serverName);
-            const isAvailable = authManager?.isAuthorized(serverName) || false;
+            const isAvailable = authManager.isAuthorized(serverName) || false;
             
             connections.push({
               name: serverName,
@@ -86,30 +97,42 @@ export function getPrompts(deps: Dependencies = {}) {
   };
 }
 
-export function getPrompt(deps: Dependencies = {}) {
+export interface GetPromptDeps {
+  promptManager: {
+    getPrompt: (name: string) => any;
+  };
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  authManager: {
+    isAuthorized: (serverName: string) => boolean;
+  };
+}
+
+export function getPrompt(deps: GetPromptDeps) {
   const { promptManager, configManager, authManager } = deps;
   
   return (req: Request, res: Response) => {
     try {
       const { promptName } = req.params;
-      const prompt = promptManager?.getPrompt(promptName);
+      const prompt = promptManager.getPrompt(promptName);
       
       if (!prompt) {
         return res.status(404).json({
-          error: 'Not Found',
+          error: 'Not Found',  
           message: `Prompt '${promptName}' does not exist`,
           timestamp: new Date().toISOString()
         });
       }
 
       // Apply same connection logic as getPrompts
-      const mcpServers = configManager?.getMcpServers() || [];
+      const mcpServers = configManager.getMcpServers() || [];
       const connections: Connection[] = [];
 
       if (prompt.mcp_servers) {
         prompt.mcp_servers.forEach((serverName: string) => {
           const server = mcpServers.find((s: any) => s.name === serverName);
-          const isAvailable = authManager?.isAuthorized(serverName) || false;
+          const isAvailable = authManager.isAuthorized(serverName) || false;
           
           connections.push({
             name: serverName,
@@ -137,7 +160,24 @@ export function getPrompt(deps: Dependencies = {}) {
   };
 }
 
-export function executePrompt(deps: Dependencies = {}) {
+export interface ExecutePromptDeps {
+  promptManager: {
+    getPrompt: (name: string) => any;
+    savePendingPrompt: (name: string, parameters: any) => void;
+  };
+  configManager: {
+    getMcpServer: (name: string) => any;
+  };
+  authManager: any; // Keep flexible for isServerAuthorized function
+  claudeService: {
+    executePromptStream: (prompt: any, parameters: any, configManager: any, authManager: any, res: Response, userEmail: string) => Promise<void>;
+  };
+  emailService?: {
+    sendAuthorizationNeededEmail?: (email: string, servers: string[]) => Promise<void>;
+  };
+}
+
+export function executePrompt(deps: ExecutePromptDeps) {
   const { promptManager, configManager, authManager, claudeService, emailService } = deps;
   
   return async (req: Request, res: Response) => {
@@ -148,7 +188,7 @@ export function executePrompt(deps: Dependencies = {}) {
       const requestParameters = req.body.parameters || {};
 
       
-      const prompt = promptManager?.getPrompt(promptName);
+      const prompt = promptManager.getPrompt(promptName);
       if (!prompt) {
         return res.status(404).json({ error: 'Prompt not found' });
       }      // Merge request parameters with defaults from prompt schema (match legacy behavior)
@@ -162,7 +202,7 @@ export function executePrompt(deps: Dependencies = {}) {
       const unauthorizedServers: string[] = [];
       if (prompt.mcp_servers) {
         for (const mcpServerName of prompt.mcp_servers) {
-          const mcpServer = configManager?.getMcpServer(mcpServerName);
+          const mcpServer = configManager.getMcpServer(mcpServerName);
           
           // Use the same authUtils function as legacy endpoint
           const isAuthorized = isServerAuthorized(mcpServerName, mcpServer, authManager);
@@ -174,7 +214,7 @@ export function executePrompt(deps: Dependencies = {}) {
 
       if (unauthorizedServers.length > 0) {
         // Save prompt for later execution (match legacy behavior)
-        promptManager?.savePendingPrompt(promptName, parameters);
+        promptManager.savePendingPrompt(promptName, parameters);
         
         // Send email notification (match legacy behavior)
         if (emailService?.sendAuthorizationNeededEmail) {
@@ -242,7 +282,7 @@ export function executePrompt(deps: Dependencies = {}) {
 /**
  * Debug endpoint to test body parsing
  */
-export function debugBody(deps: Dependencies = {}) {
+export function debugBody(deps: {} = {}) {
   return (req: Request, res: Response) => {
     console.log('=== DEBUG ENDPOINT ===');
     console.log('Method:', req.method);
@@ -266,7 +306,10 @@ export function debugBody(deps: Dependencies = {}) {
  * @param app - Express application instance
  * @param deps - Dependencies for dependency injection
  */
-export function setupPromptRoutes(app: Express, deps: Dependencies = {}) {
+export function setupPromptRoutes(
+  app: Express, 
+  deps: GetPromptsDeps & GetPromptDeps & ExecutePromptDeps
+) {
   // GET /api/prompts - Get all available prompts with their authorization status
   app.get('/api/prompts', getPrompts(deps));
   

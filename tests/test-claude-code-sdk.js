@@ -1,4 +1,4 @@
-import { ClaudeServiceFactory } from '../src/services/ClaudeServiceFactory.js';
+import { ClaudeServiceFactory } from '../src/services/claude/ClaudeServiceFactory.js';
 import dotenv from 'dotenv';
 
 // Load environment variables

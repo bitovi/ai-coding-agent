@@ -408,26 +408,63 @@ Get recent execution history across all prompts.
 **Response:**
 ```json
 {
-  "executions": [
-    {
-      "id": "exec_123",
-      "promptName": "create-jira-issue",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "userEmail": "user@example.com",
-      "status": "completed",
-      "duration": 5200,
-      "parameters": {...},
-      "output": "Issue created successfully: PROJ-123"
+  "success": true,
+  "data": {
+    "executions": [
+      {
+        "id": "exec_123",
+        "promptName": "create-jira-issue",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "userEmail": "user@example.com",
+        "status": "completed",
+        "duration": 5200,
+        "parameters": {...},
+        "output": "Issue created successfully: PROJ-123"
+      }
+    ],
+    "pagination": {
+      "total": 50,
+      "limit": 20,
+      "offset": 0,
+      "hasMore": true
     }
-  ],
-  "pagination": {
-    "total": 50,
-    "limit": 20,
-    "offset": 0,
-    "hasMore": true
-  }
+  },
+  "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
+
+---
+
+#### `GET /api/executions/:executionId`
+Get details for a specific execution.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "exec_123",
+    "promptName": "create-jira-issue",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "userEmail": "user@example.com",
+    "status": "completed",
+    "duration": 5200,
+    "parameters": {
+      "summary": "Fix login bug",
+      "description": "Users cannot log in"
+    },
+    "messages": [...],
+    "toolUses": [...],
+    "toolResults": [...],
+    "response": {...},
+    "error": null
+  },
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: Execution does not exist
 
 ---
 

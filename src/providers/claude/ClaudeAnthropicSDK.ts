@@ -1,11 +1,17 @@
 import { Anthropic } from '@anthropic-ai/sdk';
-import { processPrompt } from '../../public/js/prompt-utils.js';
+import { Response } from 'express';
+import { processPrompt } from '../../../public/js/prompt-utils.js';
+import type { Prompt } from '../../types/index.js';
+import type { ExecutionHistoryProvider } from '../ExecutionHistoryProvider.js';
 
 /**
  * Service for interacting with Claude API using Anthropic SDK
  */
 export class ClaudeAnthropicSDK {
-  constructor(executionHistoryService = null) {
+  private anthropic: Anthropic;
+  private executionHistoryService: ExecutionHistoryProvider | null;
+
+  constructor(executionHistoryService: ExecutionHistoryProvider | null = null) {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY environment variable is required');
     }
@@ -20,15 +26,22 @@ export class ClaudeAnthropicSDK {
   /**
    * Set the execution history service (used during app initialization)
    */
-  setExecutionHistoryService(executionHistoryService) {
+  setExecutionHistoryService(executionHistoryService: ExecutionHistoryProvider): void {
     this.executionHistoryService = executionHistoryService;
   }
 
   /**
    * Execute a prompt with streaming response
    */
-  async executePromptStream(prompt, parameters, configManager, authManager, res, userEmail = 'unknown') {
-    let executionId = null;
+  async executePromptStream(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any, 
+    res: Response, 
+    userEmail: string = 'unknown'
+  ): Promise<void> {
+    let executionId: string | null = null;
     
     try {
       // Create execution record
@@ -69,14 +82,14 @@ export class ClaudeAnthropicSDK {
         messages: processedPrompt.messages,
         mcp_servers: mcpServers,
         stream: true
-      }, {
+      } as any, {
         headers: {
           "anthropic-beta": "mcp-client-2025-04-04"
         }
       });
 
       // Stream the response
-      for await (const chunk of response) {
+      for await (const chunk of response as any) {
         this.handleStreamChunk(chunk, res, executionId);
       }
 
@@ -89,7 +102,7 @@ export class ClaudeAnthropicSDK {
       this.sendSSEEvent(res, 'complete', { message: 'Prompt execution completed', executionId });
       res.end();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Claude execution error:', error);
       
       // Record the error in execution history
@@ -107,14 +120,14 @@ export class ClaudeAnthropicSDK {
    * Process prompt messages for parameter substitution
    * @deprecated Use shared utility from prompt-utils.js instead
    */
-  processPrompt(prompt, parameters) {
+  processPrompt(prompt: Prompt, parameters: Record<string, any>): any {
     return processPrompt(prompt, parameters);
   }
 
   /**
    * Build system message for Claude
    */
-  buildSystemMessage(mcpServers) {
+  buildSystemMessage(mcpServers: any[]): string {
     const serverNames = mcpServers.map(s => s.name).join(', ');
     return `You have access to the following MCP services: ${serverNames}. Use these tools to help the user accomplish their goals.`;
   }
@@ -122,7 +135,7 @@ export class ClaudeAnthropicSDK {
   /**
    * Handle streaming chunks from Claude
    */
-  handleStreamChunk(chunk, res, executionId = null) {
+  handleStreamChunk(chunk: any, res: Response, executionId: string | null = null): void {
     // Record the chunk in execution history
     if (this.executionHistoryService && executionId) {
       this.executionHistoryService.addMessage(executionId, chunk.type, chunk);
@@ -208,7 +221,7 @@ export class ClaudeAnthropicSDK {
   /**
    * Send Server-Sent Event
    */
-  sendSSEEvent(res, event, data) {
+  sendSSEEvent(res: Response, event: string, data: any): void {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
@@ -216,7 +229,12 @@ export class ClaudeAnthropicSDK {
   /**
    * Execute a prompt without streaming (for testing/debugging)
    */
-  async executePrompt(prompt, parameters, configManager, authManager) {
+  async executePrompt(
+    prompt: Prompt, 
+    parameters: Record<string, any>, 
+    configManager: any, 
+    authManager: any
+  ): Promise<any> {
     const processedPrompt = processPrompt(prompt, parameters);
     const mcpServers = configManager.prepareMcpServersForClaude(
       prompt.mcp_servers, 
@@ -229,7 +247,7 @@ export class ClaudeAnthropicSDK {
       system: this.buildSystemMessage(mcpServers),
       messages: processedPrompt.messages,
       mcp_servers: mcpServers
-    }, {
+    } as any, {
       headers: {
         "anthropic-beta": "mcp-client-2025-04-04"
       }

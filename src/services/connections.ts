@@ -1,25 +1,33 @@
 import type { Request, Response, Express } from 'express';
-import type { Connection, ApiResponse } from '../../types/index.js';
+import type { Connection, ApiResponse } from '../types/index.js';
 import { 
   handleError, 
   checkConnectionAvailability,
   getConnectionDetails,
   setupGitCredentials,
-  setupDockerCredentials,
-  type Dependencies 
+  setupDockerCredentials
 } from './common.js';
 
-export function getConnections(deps: Dependencies = {}) {
+export interface GetConnectionsDeps {
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  authManager: {
+    isAuthorized: (serverName: string) => boolean;
+  };
+}
+
+export function getConnections(deps: GetConnectionsDeps) {
   const { configManager, authManager } = deps;
   
   return (req: Request, res: Response) => {
     try {
       const connections: Connection[] = [];
-      const mcpServers = configManager?.getMcpServers() || [];
+      const mcpServers = configManager.getMcpServers() || [];
 
       // Add MCP server connections
       mcpServers.forEach((server: any) => {
-        const isAvailable = authManager?.isAuthorized(server.name) || false;
+        const isAvailable = authManager.isAuthorized(server.name) || false;
         
         connections.push({
           name: server.name,
@@ -82,13 +90,23 @@ export function getConnections(deps: Dependencies = {}) {
   };
 }
 
-export function authorizeMcpServer(deps: Dependencies = {}) {
+export interface AuthorizeMcpServerDeps {
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  authManager: {
+    isAuthorized: (serverName: string) => boolean;
+    initiateAuthorization: (server: any) => Promise<string>;
+  };
+}
+
+export function authorizeMcpServer(deps: AuthorizeMcpServerDeps) {
   const { configManager, authManager } = deps;
   
   return async (req: Request, res: Response) => {
     try {
       const { mcpName } = req.params;
-      const mcpServers = configManager?.getMcpServers() || [];
+      const mcpServers = configManager.getMcpServers() || [];
       const server = mcpServers.find((s: any) => s.name === mcpName);
       
       if (!server) {
@@ -99,7 +117,7 @@ export function authorizeMcpServer(deps: Dependencies = {}) {
         });
       }
 
-      if (authManager?.isAuthorized(mcpName)) {
+      if (authManager.isAuthorized(mcpName)) {
         return res.status(400).json({
           error: 'Bad Request',
           message: `MCP server '${mcpName}' is already authorized`,
@@ -108,7 +126,7 @@ export function authorizeMcpServer(deps: Dependencies = {}) {
       }
 
       // Initiate authorization
-      const authUrl = await authManager?.initiateAuthorization(server);
+      const authUrl = await authManager.initiateAuthorization(server);
       
       if (!authUrl) {
         return res.status(400).json({
@@ -131,13 +149,23 @@ export function authorizeMcpServer(deps: Dependencies = {}) {
   };
 }
 
-export function getMcpServerStatus(deps: Dependencies = {}) {
+export interface GetMcpServerStatusDeps {
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  authManager: {
+    isAuthorized: (serverName: string) => boolean;
+    getTokens: (serverName: string) => any;
+  };
+}
+
+export function getMcpServerStatus(deps: GetMcpServerStatusDeps) {
   const { configManager, authManager } = deps;
   
   return (req: Request, res: Response) => {
     try {
       const { mcpName } = req.params;
-      const mcpServers = configManager?.getMcpServers() || [];
+      const mcpServers = configManager.getMcpServers() || [];
       const server = mcpServers.find((s: any) => s.name === mcpName);
       
       if (!server) {
@@ -148,8 +176,8 @@ export function getMcpServerStatus(deps: Dependencies = {}) {
         });
       }
 
-      const isAvailable = authManager?.isAuthorized(mcpName) || false;
-      const tokens = authManager?.getTokens(mcpName);
+      const isAvailable = authManager.isAuthorized(mcpName) || false;
+      const tokens = authManager.getTokens(mcpName);
 
       const response: ApiResponse = {
         success: true,
@@ -174,7 +202,7 @@ export function getMcpServerStatus(deps: Dependencies = {}) {
   };
 }
 
-export function setupCredentialConnection(deps: Dependencies = {}) {
+export function setupCredentialConnection() {
   return async (req: Request, res: Response) => {
     try {
       const { credentialType } = req.params;
@@ -248,7 +276,10 @@ export function setupCredentialConnection(deps: Dependencies = {}) {
  * @param app - Express application instance 
  * @param deps - Dependencies for dependency injection
  */
-export function setupConnectionRoutes(app: Express, deps: Dependencies = {}) {
+export function setupConnectionRoutes(
+  app: Express, 
+  deps: GetConnectionsDeps & AuthorizeMcpServerDeps & GetMcpServerStatusDeps
+) {
   // GET /api/connections - Get all available connections and their status
   app.get('/api/connections', getConnections(deps));
   
@@ -259,5 +290,5 @@ export function setupConnectionRoutes(app: Express, deps: Dependencies = {}) {
   app.get('/api/connections/mcp/:mcpName/status', getMcpServerStatus(deps));
   
   // POST /api/connections/credential/:credentialType/setup - Configure credential-based connections
-  app.post('/api/connections/credential/:credentialType/setup', setupCredentialConnection(deps));
+  app.post('/api/connections/credential/:credentialType/setup', setupCredentialConnection());
 }

@@ -1,9 +1,10 @@
 import type { Request, Response, Express } from 'express';
-import type { ApiResponse } from '../../types/index.js';
-import { handleError, type Dependencies } from './common.js';
+import type { ApiResponse } from '../types/index.js';
+import { handleError } from './common.js';
 
 // === SYSTEM INFORMATION ===
 
+// getSystemHealth doesn't need any dependencies
 export function getSystemHealth() {
   return (req: Request, res: Response): void => {
     try {
@@ -24,13 +25,22 @@ export function getSystemHealth() {
   };
 }
 
-export function getSystemStatus(deps: Dependencies = {}) {
+interface GetSystemStatusDeps {
+  configManager: {
+    getMcpServers: () => any[];
+    getPrompts?: () => any[];
+  };
+  claudeService?: any;
+  authService?: any;
+}
+
+export function getSystemStatus(deps: GetSystemStatusDeps) {
   const { configManager, claudeService, authService } = deps;
   
   return (req: Request, res: Response): void => {
     try {
-      const mcpServers = configManager?.getMcpServers() || [];
-      const prompts = configManager?.getPrompts?.() || [];
+      const mcpServers = configManager.getMcpServers() || [];
+      const prompts = configManager.getPrompts?.() || [];
       
       const response: ApiResponse = {
         success: true,
@@ -59,7 +69,16 @@ export function getSystemStatus(deps: Dependencies = {}) {
   };
 }
 
-export function getSystemConfig(deps: Dependencies = {}) {
+interface GetSystemConfigDeps {
+  configManager: {
+    getMcpServers: () => any[];
+  };
+  emailService?: {
+    isConfigured: () => boolean;
+  };
+}
+
+export function getSystemConfig(deps: GetSystemConfigDeps) {
   const { configManager, emailService } = deps;
   
   return (req: Request, res: Response): void => {
@@ -88,7 +107,10 @@ export function getSystemConfig(deps: Dependencies = {}) {
  * @param app - Express application instance
  * @param deps - Dependencies for dependency injection  
  */
-export function setupSystemRoutes(app: Express, deps: Dependencies = {}) {
+export function setupSystemRoutes(
+  app: Express, 
+  deps: GetSystemStatusDeps & GetSystemConfigDeps
+) {
   // GET /api/system/health - Health check endpoint
   app.get('/api/system/health', getSystemHealth());
   

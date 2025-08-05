@@ -7,7 +7,7 @@
 import dotenv from 'dotenv';
 import { ConfigManager } from '../src/config/ConfigManager.js';
 import { PromptManager } from '../src/prompts/PromptManager.js';
-import { EmailService } from '../src/services/EmailService.js';
+import { EmailProvider } from '../src/providers/EmailProvider.js';
 
 dotenv.config();
 
@@ -65,9 +65,9 @@ async function validateConfigurations() {
     await promptManager.loadPrompts();
     console.log(`✅ Loaded ${promptManager.getPrompts().length} prompts`);
 
-    // Test EmailService
-    console.log('📧 Testing EmailService...');
-    const emailService = new EmailService();
+    // Test EmailProvider
+    console.log('📧 Testing EmailProvider...');
+    const emailService = new EmailProvider();
     const emailTest = await emailService.testEmailConfiguration();
     if (emailTest.success) {
       console.log(`✅ Email service: ${emailTest.message}`);

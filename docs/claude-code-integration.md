@@ -158,12 +158,8 @@ const claudeService = ClaudeServiceFactory.create(executionHistoryService);
 const validation = await ClaudeServiceFactory.validateConfiguration();
 if (!validation.isValid) {
   console.error('Configuration invalid:', validation.messages);
+  console.log('Please check the documentation for setup instructions.');
 }
-
-// Get configuration instructions
-const instructions = ClaudeServiceFactory.getConfigurationInstructions();
-console.log(instructions.title);
-console.log(instructions.instructions.join('\n'));
 ```
 
 ## Testing

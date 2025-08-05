@@ -12,7 +12,7 @@ The specifications in the `specifications` directory should be kept up to date.
 
 ## Frontend APIs 
 
-The frontend APIs are defined in `src/services/web-client-services/`.
+The frontend APIs are defined in `src/services/`.
 
 Read about them in `specifications/ui-apis.md` when needing to know how the 
 backend API works. We should always follow this specification and keep it up to date with any backend changes.

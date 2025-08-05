@@ -1,11 +1,11 @@
 import type { Request, Response } from 'express';
-import type { ApiResponse } from '../../types/index.js';
+import type { ApiResponse } from '../types/index.js';
 import { 
   validateGitCredentials, 
   getGitCredentialDetails, 
   isConnectionAvailable as checkConnectionValidator,
   type GitCredentialDetails 
-} from '../../auth/connectionValidators.js';
+} from '../auth/connectionValidators.js';
 
 // Dependencies interface for dependency injection
 export interface Dependencies {
@@ -78,6 +78,9 @@ export async function setupGitCredentials(token: string): Promise<boolean> {
     const fs = await import('fs');
     const os = await import('os');
     const path = await import('path');
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
     
     // Validate token format first
     if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
@@ -96,7 +99,11 @@ export async function setupGitCredentials(token: string): Promise<boolean> {
     // Write the credentials file with proper permissions
     await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
     
+    // Configure git to use the credential store
+    await execAsync('git config --global credential.helper store');
+    
     console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    console.log(`✅ Git credential helper configured to use store`);
     return true;
   } catch (error) {
     console.error('Failed to setup git credentials:', error);

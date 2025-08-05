@@ -1,11 +1,11 @@
 import type { Request, Response } from 'express';
-import { getConnections } from './connections.js';
-import type { Dependencies } from './common.js';
+import { getConnections, type GetConnectionsDeps } from './connections.js';
 
 // Mock the common module
 jest.mock('./common.js', () => ({
   handleError: jest.fn(),
   checkConnectionAvailability: jest.fn(),
+  getConnectionDetails: jest.fn(),
   setupGitCredentials: jest.fn(),
   setupDockerCredentials: jest.fn(),
 }));
@@ -13,7 +13,7 @@ jest.mock('./common.js', () => ({
 describe('getConnections', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
-  let mockDeps: Dependencies;
+  let mockDeps: GetConnectionsDeps;
 
   beforeEach(() => {
     // Reset mocks
@@ -50,6 +50,7 @@ describe('getConnections', () => {
     const commonModule = require('./common.js');
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue([]);
     commonModule.checkConnectionAvailability.mockImplementation(() => false);
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
     getConnections(mockDeps)(mockReq as Request, mockRes as Response);
@@ -113,6 +114,7 @@ describe('getConnections', () => {
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
       return type === 'git-credentials';
     });
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
     getConnections(mockDeps)(mockReq as Request, mockRes as Response);
@@ -195,6 +197,7 @@ describe('getConnections', () => {
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
     mockDeps.authManager!.isAuthorized = jest.fn().mockReturnValue(false);
     commonModule.checkConnectionAvailability.mockReturnValue(false);
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
     getConnections(mockDeps)(mockReq as Request, mockRes as Response);
@@ -227,6 +230,7 @@ describe('getConnections', () => {
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
       return type === 'git-credentials' || type === 'docker-registry';
     });
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
     getConnections(mockDeps)(mockReq as Request, mockRes as Response);
@@ -242,14 +246,21 @@ describe('getConnections', () => {
     expect(dockerConnection.details.lastConfigured).toEqual(expect.any(String));
   });
 
-  it('should handle missing dependencies gracefully', () => {
+  it('should handle missing MCP servers gracefully', () => {
     // Arrange
     const commonModule = require('./common.js');
-    const emptyDeps: Dependencies = {};
+    const depsWithNoServers: GetConnectionsDeps = {
+      configManager: {
+        getMcpServers: jest.fn().mockReturnValue([])
+      },
+      authManager: {
+        isAuthorized: jest.fn()
+      }
+    };
     commonModule.checkConnectionAvailability.mockReturnValue(false);
 
     // Act
-    getConnections(emptyDeps)(mockReq as Request, mockRes as Response);
+    getConnections(depsWithNoServers)(mockReq as Request, mockRes as Response);
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
@@ -293,6 +304,7 @@ describe('getConnections', () => {
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
       return type === 'git-credentials';
     });
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
     getConnections(mockDeps)(mockReq as Request, mockRes as Response);

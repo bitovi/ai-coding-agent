@@ -5,7 +5,7 @@
  * Tests basic functionality without full app initialization
  */
 
-import { ClaudeCodeService } from '../src/services/ClaudeCodeService.js';
+import { ClaudeCodeService } from '../src/services/claude/ClaudeCodeService.js';
 
 async function testClaudeCodeBasics() {
   console.log('🧪 Testing Claude Code Service Basics\\n');
