@@ -73,3 +73,4 @@ GIT_INTEGRATION.md
 
 # Shared repos directory (will be mounted)
 shared-repos/
+test-tokens/

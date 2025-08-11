@@ -79,6 +79,7 @@ export class AuthMiddleware {
     console.log('🔍 Session lookup result:', session ? 'found' : 'not found');
     if (!session) {
       // Clear invalid session cookie
+      console.log('🔍 Clearing invalid session cookie');
       this.clearSessionCookie(res);
       return { success: false, reason: 'invalid_session' };
     }

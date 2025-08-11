@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePromptHistory } from '@/hooks/api';
 import { CheckCircle, XCircle, Loader2, Clock } from 'lucide-react';
+import { ExecutionMessage } from './ExecutionMessage';
 
 interface ExecutionHistoryProps {
   promptName: string;
@@ -76,60 +77,7 @@ export function ExecutionHistory({ promptName }: ExecutionHistoryProps) {
                     <strong className="text-sm">Execution Messages:</strong>
                     <div className="space-y-2 mt-1">
                       {execution.messages.map((message, index) => (
-                        <div key={index} className="text-xs border rounded p-2">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {message.type}
-                            </Badge>
-                            <span className="text-muted-foreground">
-                              {new Date(message.timestamp).toLocaleTimeString()}
-                            </span>
-                          </div>
-                          
-                          {/* System init message */}
-                          {message.data?.type === 'system' && message.data?.subtype === 'init' && (
-                            <div className="bg-blue-50 p-2 rounded">
-                              <div>🏗️ System initialized</div>
-                              <div>Working directory: {message.data.cwd}</div>
-                              <div>Model: {message.data.model}</div>
-                              <div>Tools: {message.data.tools?.slice(0, 5).join(', ')}...</div>
-                            </div>
-                          )}
-
-                          {/* Assistant message */}
-                          {message.data?.type === 'assistant' && message.data?.message?.content && (
-                            <div className="bg-green-50 p-2 rounded">
-                              <div>🤖 Claude: {message.data.message.content[0]?.text}</div>
-                              {message.data.message.usage && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Tokens: {message.data.message.usage.input_tokens} input, {message.data.message.usage.output_tokens} output
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Result message */}
-                          {message.data?.type === 'result' && (
-                            <div className="bg-gray-50 p-2 rounded">
-                              <div>✅ Result: {message.data.result}</div>
-                              <div className="text-xs text-muted-foreground mt-1">
-                                Duration: {message.data.duration_ms}ms | 
-                                Turns: {message.data.num_turns} | 
-                                Cost: ${message.data.total_cost_usd?.toFixed(6)}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Raw message data for debugging */}
-                          <details className="mt-1">
-                            <summary className="text-xs cursor-pointer text-muted-foreground">
-                              Show raw data
-                            </summary>
-                            <pre className="text-xs bg-gray-100 p-1 rounded mt-1 overflow-x-auto">
-                              {JSON.stringify(message.data, null, 2)}
-                            </pre>
-                          </details>
-                        </div>
+                        <ExecutionMessage key={index} message={message} />
                       ))}
                     </div>
                   </div>

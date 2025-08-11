@@ -53,18 +53,18 @@ describe('getPrompts', () => {
         getMcpServers: jest.fn()
       },
       authManager: {
-        isAuthorized: jest.fn()
+        isAuthorized: jest.fn().mockResolvedValue(false)
       }
     };
   });
 
-  it('should return empty prompts array when no prompts exist', () => {
+  it('should return empty prompts array when no prompts exist', async () => {
     // Arrange
     mockDeps.promptManager.getPrompts = jest.fn().mockReturnValue([]);
     mockDeps.configManager.getMcpServers = jest.fn().mockReturnValue([]);
 
     // Act
-    getPrompts(mockDeps)(mockReq as Request, mockRes as Response);
+    await getPrompts(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     expect(mockRes.json).toHaveBeenCalledWith({
@@ -72,7 +72,7 @@ describe('getPrompts', () => {
     });
   });
 
-  it('should return prompts with basic information when no connections required', () => {
+  it('should return prompts with basic information when no connections required', async () => {
     // Arrange
     const mockPrompts = [
       {
@@ -89,7 +89,7 @@ describe('getPrompts', () => {
     mockDeps.configManager.getMcpServers = jest.fn().mockReturnValue([]);
 
     // Act
-    getPrompts(mockDeps)(mockReq as Request, mockRes as Response);
+    await getPrompts(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     expect(mockRes.json).toHaveBeenCalledWith({

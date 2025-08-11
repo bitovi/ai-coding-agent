@@ -1,53 +1,43 @@
 # Public Assets Directory
 
-This directory contains static assets served by the AI Coding Agent web interface.
+This directory contains static assets served by the AI Coding Agent.
 
 ## Directory Structure
 
 ```
 public/
-├── css/
-│   └── styles.css          # Main stylesheet for the dashboard
 ├── js/
-│   └── dashboard.js        # Interactive JavaScript functionality
+│   └── prompt-utils.js     # Shared prompt processing utilities
 ├── favicon.svg             # Site favicon (robot icon)
 └── README.md              # This file
 ```
 
 ## Files
 
-### CSS (`css/styles.css`)
-- Complete styling for the web dashboard
-- Responsive design with mobile support
-- Clean, modern interface design
-- Color scheme based on flat design principles
-
-### JavaScript (`js/dashboard.js`)
-- Interactive functionality for the dashboard
-- OAuth authorization flow handling
-- Prompt execution interface
-- Real-time notification system
-- Keyboard shortcuts and UX enhancements
+### JavaScript (`js/prompt-utils.js`)
+- Shared utilities for prompt parameter processing
+- Used by both backend services and frontend components
+- Functions for merging parameters, processing prompts, and validation
 
 ### Favicon (`favicon.svg`)
 - Simple robot-themed SVG icon
 - Scalable vector format for crisp display
-- Blue color scheme matching the dashboard
+- Blue color scheme matching the application theme
 
 ## Usage
 
 These files are automatically served by Express.js from the `/static` route:
 
-- CSS: `http://localhost:3000/static/css/styles.css`
-- JS: `http://localhost:3000/static/js/dashboard.js`
+- Utilities: `http://localhost:3000/static/js/prompt-utils.js`
 - Favicon: `http://localhost:3000/static/favicon.svg`
+
+Note: The main web interface is now a React SPA served from the frontend build.
 
 ## Development
 
-When making changes to these files:
-
-1. **CSS Changes**: Will be reflected immediately on page refresh
-2. **JavaScript Changes**: May require a hard refresh (Ctrl+F5) to bypass cache
+When making changes to prompt-utils.js:
+- Changes will be reflected immediately in backend services on restart
+- Frontend may require rebuilding if importing these utilities
 3. **Adding New Files**: Place them in the appropriate subdirectory
 
 ## Asset Organization

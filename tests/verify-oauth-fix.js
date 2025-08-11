@@ -36,17 +36,20 @@ console.log('');
 console.log('✅ The Atlassian MCP OAuth flow is now fixed and working!');
 
 // Show that the AuthManager has tokens stored
-const authManager = new AuthManager();
-console.log('');
-console.log('🔍 Checking if jira service has valid tokens...');
-if (authManager.isAuthorized('jira')) {
-  console.log('✅ Jira service is authorized');
-  const tokens = authManager.getTokens('jira');
-  console.log('📋 Token info:', {
-    hasAccessToken: !!tokens?.access_token,
-    tokenType: tokens?.token_type,
-    hasRefreshToken: !!tokens?.refresh_token
-  });
-} else {
-  console.log('ℹ️  No stored tokens (expected in fresh test)');
-}
+(async () => {
+  const authManager = new AuthManager();
+  console.log('');
+  console.log('🔍 Checking if jira service has valid tokens...');
+  const isAuthorized = await authManager.isAuthorized('jira');
+  if (isAuthorized) {
+    console.log('✅ Jira service is authorized');
+    const tokens = authManager.getTokens('jira');
+    console.log('📋 Token info:', {
+      hasAccessToken: !!tokens?.access_token,
+      tokenType: tokens?.token_type,
+      hasRefreshToken: !!tokens?.refresh_token
+    });
+  } else {
+    console.log('ℹ️  No stored tokens (expected in fresh test)');
+  }
+})();

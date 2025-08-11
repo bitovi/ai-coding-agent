@@ -27,8 +27,7 @@ async function testFullStreamingFlow() {
             'streaming-output',
             'stop-execution',
             'clear-output',
-            '📺 Live Execution Output',
-            'dashboard.js'
+            '📺 Live Execution Output'
         ];
         
         console.log('\n2. Checking UI elements:');

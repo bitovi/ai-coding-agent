@@ -40,12 +40,12 @@ describe('getConnections', () => {
         getMcpServers: jest.fn()
       },
       authManager: {
-        isAuthorized: jest.fn()
+        isAuthorized: jest.fn().mockResolvedValue(false)
       }
     };
   });
 
-  it('should return empty connections array when no MCP servers exist', () => {
+  it('should return empty connections array when no MCP servers exist', async () => {
     // Arrange
     const commonModule = require('./common.js');
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue([]);
@@ -53,7 +53,7 @@ describe('getConnections', () => {
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     expect(mockRes.json).toHaveBeenCalledWith({
@@ -88,7 +88,7 @@ describe('getConnections', () => {
     });
   });
 
-  it('should return MCP server connections with authorization status', () => {
+  it('should return MCP server connections with authorization status', async () => {
     // Arrange
     const commonModule = require('./common.js');
     const mockMcpServers = [
@@ -108,8 +108,8 @@ describe('getConnections', () => {
 
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
     mockDeps.authManager!.isAuthorized = jest.fn()
-      .mockReturnValueOnce(true)  // jira authorized
-      .mockReturnValueOnce(false); // github not authorized
+      .mockResolvedValueOnce(true)  // jira authorized
+      .mockResolvedValueOnce(false); // github not authorized
 
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
       return type === 'git-credentials';
@@ -117,7 +117,7 @@ describe('getConnections', () => {
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     expect(mockRes.json).toHaveBeenCalledWith({
@@ -183,7 +183,7 @@ describe('getConnections', () => {
     expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith('github');
   });
 
-  it('should handle MCP servers without descriptions', () => {
+  it('should handle MCP servers without descriptions', async () => {
     // Arrange
     const commonModule = require('./common.js');
     const mockMcpServers = [
@@ -195,12 +195,12 @@ describe('getConnections', () => {
     ];
 
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
-    mockDeps.authManager!.isAuthorized = jest.fn().mockReturnValue(false);
+    mockDeps.authManager!.isAuthorized = jest.fn().mockResolvedValue(false);
     commonModule.checkConnectionAvailability.mockReturnValue(false);
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
@@ -222,7 +222,7 @@ describe('getConnections', () => {
     });
   });
 
-  it('should handle available credential connections', () => {
+  it('should handle available credential connections', async () => {
     // Arrange
     const commonModule = require('./common.js');
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue([]);
@@ -233,7 +233,7 @@ describe('getConnections', () => {
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
@@ -246,7 +246,7 @@ describe('getConnections', () => {
     expect(dockerConnection.details.lastConfigured).toEqual(expect.any(String));
   });
 
-  it('should handle missing MCP servers gracefully', () => {
+  it('should handle missing MCP servers gracefully', async () => {
     // Arrange
     const commonModule = require('./common.js');
     const depsWithNoServers: GetConnectionsDeps = {
@@ -254,13 +254,13 @@ describe('getConnections', () => {
         getMcpServers: jest.fn().mockReturnValue([])
       },
       authManager: {
-        isAuthorized: jest.fn()
+        isAuthorized: jest.fn().mockResolvedValue(false)
       }
     };
     commonModule.checkConnectionAvailability.mockReturnValue(false);
 
     // Act
-    getConnections(depsWithNoServers)(mockReq as Request, mockRes as Response);
+    await getConnections(depsWithNoServers)(mockReq as Request, mockRes as Response);
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
@@ -270,7 +270,7 @@ describe('getConnections', () => {
     expect(response.data.connections[1].name).toBe('docker-registry');
   });
 
-  it('should call handleError when an exception occurs', () => {
+  it('should call handleError when an exception occurs', async () => {
     // Arrange
     const commonModule = require('./common.js');
     const error = new Error('Test error');
@@ -280,13 +280,13 @@ describe('getConnections', () => {
     });
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     expect(commonModule.handleError).toHaveBeenCalledWith(mockRes, error);
   });
 
-  it('should include all connection types in mixed scenario', () => {
+  it('should include all connection types in mixed scenario', async () => {
     // Arrange
     const commonModule = require('./common.js');
     const mockMcpServers = [
@@ -299,7 +299,7 @@ describe('getConnections', () => {
     ];
 
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
-    mockDeps.authManager!.isAuthorized = jest.fn().mockReturnValue(true);
+    mockDeps.authManager!.isAuthorized = jest.fn().mockResolvedValue(true);
     
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
       return type === 'git-credentials';
@@ -307,7 +307,7 @@ describe('getConnections', () => {
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
     // Act
-    getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];

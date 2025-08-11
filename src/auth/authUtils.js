@@ -46,13 +46,13 @@ function validateGitHubCredentials(server) {
  * @param {string} serverName - Name of the MCP server
  * @param {Object} server - Server configuration object
  * @param {Object} authManager - AuthManager instance
- * @returns {boolean} True if the server is authorized
+ * @returns {Promise<boolean>} True if the server is authorized
  */
-export function isServerAuthorized(serverName, server, authManager) {
+export async function isServerAuthorized(serverName, server, authManager) {
   const hasConfigToken = server && server.authorization_token;
   const envTokenKey = `MCP_${serverName}_authorization_token`;
   const hasEnvToken = process.env[envTokenKey];
-  const hasOAuthToken = authManager.isAuthorized(serverName);
+  const hasOAuthToken = await authManager.isAuthorized(serverName);
   
   // Check standard auth methods first
   if (hasConfigToken || hasEnvToken || hasOAuthToken) {
@@ -101,13 +101,13 @@ const credentialValidators = {
  * @param {string} serverName - Name of the MCP server
  * @param {Object} server - Server configuration object
  * @param {Object} authManager - AuthManager instance
- * @returns {Object} Object with detailed authorization status
+ * @returns {Promise<Object>} Object with detailed authorization status
  */
-export function getAuthorizationDetails(serverName, server, authManager) {
+export async function getAuthorizationDetails(serverName, server, authManager) {
   const hasConfigToken = server && server.authorization_token;
   const envTokenKey = `MCP_${serverName}_authorization_token`;
   const hasEnvToken = process.env[envTokenKey];
-  const hasOAuthToken = authManager.isAuthorized(serverName);
+  const hasOAuthToken = await authManager.isAuthorized(serverName);
   const hasCustomCredentials = checkCustomCredentials(serverName, server);
   
   const authMethod = hasConfigToken ? 'config' : 
