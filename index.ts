@@ -344,11 +344,9 @@ class AICodingAgent {
           req.path.startsWith('/mcp/') ||
           req.path.startsWith('/oauth/') ||
           req.path.startsWith('/prompt/') ||
-          req.path.startsWith('/legacy/') ||
           req.path.startsWith('/static/') ||
           req.path.startsWith('/assets/') ||
-          req.path === '/health' ||
-          req.path === '/login-static') {
+          req.path === '/health') {
         return res.status(404).json({ error: 'Not found' });
       }
       
