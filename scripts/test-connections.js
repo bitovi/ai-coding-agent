@@ -34,7 +34,7 @@ async function main() {
       // Check authorization status
       if (server.authorization_token) {
         console.log(`   ✅ Has authorization token`);
-      } else if (authManager.isAuthorized(server.name)) {
+      } else if (await authManager.isAuthorized(server.name)) {
         console.log(`   ✅ Has stored OAuth tokens`);
       } else {
         console.log(`   ⚠️  No authorization - OAuth flow required`);

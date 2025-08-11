@@ -1,14 +1,20 @@
-import { query, SDKMessage, Options, PermissionMode } from '@anthropic-ai/claude-code';
+import { 
+  query, 
+  SDKMessage, 
+  Options, 
+  PermissionMode,
+  McpServerConfig as ClaudeCodeMcpServerConfig
+} from '@anthropic-ai/claude-code';
 import { Response } from 'express';
 import { processPrompt } from '../../../public/js/prompt-utils.js';
 import fs from 'fs-extra';
-import path from 'path';
-import os from 'os';
+import * as path from 'path';
+import * as os from 'os';
 import type { Prompt } from '../../types/index.js';
 import type { ExecutionHistoryProvider } from '../ExecutionHistoryProvider.js';
 
 interface McpServerConfig {
-  type: 'stdio' | 'sse' | 'http';
+  type?: 'stdio' | 'sse' | 'http';
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -18,41 +24,18 @@ interface McpServerConfig {
 
 interface McpServer {
   name: string;
-  type?: 'stdio' | 'sse' | 'http';
+  type?: 'stdio' | 'sse' | 'http' | 'url';
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  authorization_token?: string;
+  tool_configuration?: any;
 }
 
 interface McpConfig {
   mcpServers: Record<string, McpServerConfig>;
-}
-
-interface ClaudeCodeSDKOptions {
-  maxTurns: number;
-  cwd: string;
-  mcpConfig: string;
-  outputFormat: string;
-  allowedTools: string[];
-  permissionMode: PermissionMode;
-}
-
-interface ClaudeCodeSDKMessage {
-  type: string;
-  subtype?: string;
-  message?: any;
-  session_id?: string;
-  cwd?: string;
-  tools?: string[];
-  mcp_servers?: any;
-  model?: string;
-  permissionMode?: string;
-  result?: any;
-  duration_ms?: number;
-  total_cost_usd?: number;
-  num_turns?: number;
 }
 
 /**
@@ -107,43 +90,11 @@ export class ClaudeCodeSDKService {
 
   /**
    * Configure MCP servers for Claude Code SDK
+   * Note: In the new API, we pass mcpServers directly to options instead of using a config file
    */
   async configureMcpServers(mcpServers: McpServer[], authManager: any): Promise<string> {
-    const mcpConfig: McpConfig = {
-      mcpServers: {}
-    };
-
-    for (const server of mcpServers) {
-      const serverConfig: McpServerConfig = {
-        type: server.type || 'stdio'
-      };
-
-      if (server.type === 'stdio' || !server.type) {
-        serverConfig.command = server.command;
-        if (server.args) {
-          serverConfig.args = server.args;
-        }
-        if (server.env) {
-          serverConfig.env = server.env;
-        }
-      } else if (server.type === 'sse') {
-        serverConfig.url = server.url;
-        if (server.headers) {
-          serverConfig.headers = server.headers;
-        }
-      } else {
-        console.warn(`⚠️  Unknown MCP server type: ${server.type}`);
-        continue;
-      }
-
-      mcpConfig.mcpServers[server.name] = serverConfig;
-    }
-
-    // Write MCP configuration to temporary file
-    await fs.writeJson(this.mcpConfigPath, mcpConfig, { spaces: 2 });
-    
     console.log(`📝 Configured ${mcpServers.length} MCP servers for Claude Code SDK`);
-    return this.mcpConfigPath;
+    return this.mcpConfigPath; // Return path for compatibility, but not actually used
   }
 
   /**
@@ -169,28 +120,21 @@ export class ClaudeCodeSDKService {
           parameters,
           userEmail
         );
-        console.log('🔍 [DEBUG] Created execution record:', executionId);
       }
 
       // Process prompt with parameter substitution
-      console.log('🔍 [DEBUG] Processing prompt with parameters...');
       const processedPrompt = processPrompt(prompt, parameters);
-      console.log('🔍 [DEBUG] Processed prompt messages:', processedPrompt.messages.length);
       
       // Prepare MCP servers configuration
-      console.log('🔍 [DEBUG] Preparing MCP servers...');
       const mcpServers = configManager.prepareMcpServersForClaude(
         prompt.mcp_servers, 
         authManager
       );
-      console.log('🔍 [DEBUG] Prepared MCP servers:', mcpServers.length);
 
       // Configure MCP servers for Claude Code SDK
-      console.log('🔍 [DEBUG] Configuring MCP servers for Claude Code SDK...');
       const mcpConfigPath = await this.configureMcpServers(mcpServers, authManager);
 
       // Set up SSE headers
-      console.log('🔍 [DEBUG] Setting up SSE headers...');
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -202,43 +146,40 @@ export class ClaudeCodeSDKService {
       // Send initial status
       this.sendSSEEvent(res, 'status', { message: 'Starting Claude Code SDK execution...', executionId });
 
-      // Build the prompt content for Claude Code SDK
-      console.log('🔍 [DEBUG] Building prompt content...');
-      const promptContent = this.buildPromptContent(processedPrompt, mcpServers);
-      console.log('🔍 [DEBUG] Prompt content length:', promptContent.length);
-      
-      // Prepare Claude Code SDK options
-      const options = {
-        maxTurns: 10,
-        cwd: this.tempDir,
-        mcpConfig: mcpConfigPath,
-        outputFormat: 'stream-json',
-        allowedTools: this.buildAllowedTools(mcpServers),
-        permissionMode: 'acceptEdits'
-      } as any;
-
-      console.log('🔍 [DEBUG] Claude Code SDK options:', options);
-      console.log('🚀 Executing Claude Code SDK query...');
+      // Build the prompt content for Claude Code SDK (just the user message)
+      const promptContent = processedPrompt.messages
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.content)
+        .join('\n\n');
       
       // Execute Claude Code SDK query
       const abortController = new AbortController();
       
       // Set up abort on client disconnect
       res.on('close', () => {
-        console.log('🔍 [DEBUG] Client disconnected, aborting Claude Code SDK query');
         abortController.abort();
       });
+
+      // Prepare Claude Code SDK options with proper system prompt
+      const options: Options = {
+        customSystemPrompt: "You are a Jira integration assistant. You can use Jira tools to create, query, and manage issues. The Jira instance is at https://bitovi.atlassian.net and you have access to it via MCP tools.",
+        maxTurns: 5,
+        cwd: this.tempDir,
+        mcpServers: this.buildMcpServersConfig(mcpServers),
+        allowedTools: this.buildAllowedTools(mcpServers),
+        permissionMode: 'acceptEdits',
+        abortController
+      };
 
       const messages: SDKMessage[] = [];
       let messageStarted = false;
 
       for await (const message of query({
         prompt: promptContent,
-        abortController,
         options
       })) {
         messages.push(message);
-        this.handleClaudeCodeSDKMessage(message as any, res, executionId, messageStarted);
+        this.handleClaudeCodeSDKMessage(message, res, executionId, messageStarted);
         
         if (message.type === 'assistant') {
           messageStarted = true;
@@ -246,7 +187,6 @@ export class ClaudeCodeSDKService {
       }
 
       // Mark execution as completed
-      console.log('🔍 [DEBUG] Claude Code SDK execution completed, updating status...');
       if (this.executionHistoryService && executionId) {
         this.executionHistoryService.updateStatus(executionId, 'completed');
       }
@@ -254,11 +194,9 @@ export class ClaudeCodeSDKService {
       // Send completion event
       this.sendSSEEvent(res, 'complete', { message: 'Claude Code SDK execution completed', executionId });
       res.end();
-      console.log('🔍 [DEBUG] executePromptStream completed successfully');
 
     } catch (error: any) {
       console.error('❌ Claude Code SDK execution error:', error);
-      console.log('🔍 [DEBUG] Error in executePromptStream:', error.stack);
       
       // Record the error in execution history
       if (this.executionHistoryService && executionId) {
@@ -300,9 +238,11 @@ export class ClaudeCodeSDKService {
     // Add basic tools
     allowedTools.push('Read', 'Write', 'Bash');
     
-    // Add MCP tools
+    // Add MCP base tool
+    allowedTools.push('mcp');
+    
+    // Add MCP tools for each server using the correct naming convention
     for (const server of mcpServers) {
-      // Allow all tools from each server
       allowedTools.push(`mcp__${server.name}`);
     }
     
@@ -310,10 +250,68 @@ export class ClaudeCodeSDKService {
   }
 
   /**
+   * Build MCP servers configuration for Claude Code SDK
+   */
+  buildMcpServersConfig(mcpServers: McpServer[]): Record<string, ClaudeCodeMcpServerConfig> {
+    const mcpServersConfig: Record<string, ClaudeCodeMcpServerConfig> = {};
+
+    for (const server of mcpServers) {
+      let serverConfig: ClaudeCodeMcpServerConfig;
+
+      if (server.type === 'stdio' || !server.type) {
+        serverConfig = {
+          command: server.command || '',
+          args: server.args,
+          env: server.env
+        } as ClaudeCodeMcpServerConfig;
+      } else if (server.type === 'sse' || server.type === 'url') {
+        const headers: Record<string, string> = {};
+        
+        if (server.authorization_token) {
+          headers['Authorization'] = `Bearer ${server.authorization_token}`;
+        }
+        
+        if (server.headers) {
+          Object.assign(headers, server.headers);
+        }
+
+        serverConfig = {
+          type: 'sse',
+          url: server.url || '',
+          headers: Object.keys(headers).length > 0 ? headers : undefined
+        } as ClaudeCodeMcpServerConfig;
+      } else if (server.type === 'http') {
+        const headers: Record<string, string> = {};
+        
+        if (server.authorization_token) {
+          headers['Authorization'] = `Bearer ${server.authorization_token}`;
+        }
+        
+        if (server.headers) {
+          Object.assign(headers, server.headers);
+        }
+
+        serverConfig = {
+          type: 'http',
+          url: server.url || '',
+          headers: Object.keys(headers).length > 0 ? headers : undefined
+        } as ClaudeCodeMcpServerConfig;
+      } else {
+        console.warn(`⚠️  Unknown MCP server type: ${server.type}`);
+        continue;
+      }
+
+      mcpServersConfig[server.name] = serverConfig;
+    }
+
+    return mcpServersConfig;
+  }
+
+  /**
    * Handle messages from Claude Code SDK
    */
   handleClaudeCodeSDKMessage(
-    message: ClaudeCodeSDKMessage, 
+    message: SDKMessage, 
     res: Response, 
     executionId: string | null, 
     messageStarted: boolean
@@ -323,23 +321,10 @@ export class ClaudeCodeSDKService {
       this.executionHistoryService.addMessage(executionId, 'claude_code_sdk_message', message);
     }
 
-    console.log('🔍 [DEBUG] Handling Claude Code SDK message:', message.type);
-    
-    // Add detailed logging for assistant messages with tool usage
-    if (message.type === 'assistant' && message.message?.content) {
-      for (const content of message.message.content) {
-        if (content.type === 'tool_use') {
-          console.log(`🔧 [DEBUG] Tool used: ${content.name}`);
-          console.log(`📋 [DEBUG] Tool input:`, JSON.stringify(content.input, null, 2));
-        } else if (content.type === 'text') {
-          console.log(`💬 [DEBUG] Assistant text: ${content.text.substring(0, 100)}...`);
-        }
-      }
-    }
-
     switch (message.type) {
       case 'system':
         if (message.subtype === 'init') {
+          
           this.sendSSEEvent(res, 'system_init', {
             sessionId: message.session_id,
             cwd: message.cwd,
@@ -477,21 +462,20 @@ export class ClaudeCodeSDKService {
     const promptContent = this.buildPromptContent(processedPrompt, mcpServers);
 
     // Prepare Claude Code SDK options
-    const options = {
+    const options: Options = {
       maxTurns: 10,
       cwd: this.tempDir,
-      mcpConfig: mcpConfigPath,
-      outputFormat: 'json',
+      mcpServers: this.buildMcpServersConfig(mcpServers),
       allowedTools: this.buildAllowedTools(mcpServers),
-      permissionMode: 'acceptEdits'
-    } as any;
+      permissionMode: 'acceptEdits',
+      abortController: new AbortController()
+    };
 
     try {
       const messages: SDKMessage[] = [];
       
       for await (const message of query({
         prompt: promptContent,
-        abortController: new AbortController(),
         options
       })) {
         messages.push(message);

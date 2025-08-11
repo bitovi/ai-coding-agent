@@ -1,5 +1,5 @@
 import path from 'path';
-import { isServerAuthorized } from '../auth/authUtils.js';
+import { isServerAuthorizedSync as isServerAuthorized } from '../auth/authUtils.js';
 import { isConnectionAvailable, getAllConnectionStatuses } from '../auth/connectionValidators.js';
 
 /**

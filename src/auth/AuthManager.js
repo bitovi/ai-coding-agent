@@ -3,21 +3,33 @@ import express from 'express';
 import open from 'open';
 import fetch from 'node-fetch';
 import { URL } from 'url';
+import { EncryptedTokensFolderProvider } from '../providers/EncryptedTokensFolderProvider.ts';
 
 /**
  * Manages OAuth authorization flows for MCP services
  */
 export class AuthManager {
   constructor() {
-    this.tokenStore = new Map(); // Maps service name to token data
-    this.authSessions = new Map(); // Maps session ID to auth session data
+    // Initialize token storage - use encrypted file storage if configured, otherwise in-memory
+    if (process.env.TOKENS_PATH && process.env.TOKENS_ENCRYPTION_KEY) {
+      this.tokenStore = new EncryptedTokensFolderProvider(
+        process.env.TOKENS_PATH, 
+        process.env.TOKENS_ENCRYPTION_KEY
+      );
+      console.log(`🔐 Using encrypted token storage: ${process.env.TOKENS_PATH}`);
+    } else {
+      this.tokenStore = new Map(); // Fallback to in-memory storage
+      console.log(`💾 Using in-memory token storage`);
+    }
+    
+    this.authSessions = new Map(); // Maps session ID to auth session data (always in-memory)
     this.defaultRedirectUri = process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/oauth/callback';
   }
 
   /**
    * Check if a service is authorized (has valid tokens)
    */
-  isAuthorized(serviceName) {
+  async isAuthorized(serviceName) {
     const tokens = this.tokenStore.get(serviceName);
     if (!tokens) return false;
     
@@ -25,9 +37,16 @@ export class AuthManager {
     if (tokens.expires_at && tokens.expires_at < Date.now()) {
       // Token expired, try to refresh if we have a refresh token
       if (tokens.refresh_token) {
-        // TODO: Implement token refresh
-        console.log(`⚠️  Token for ${serviceName} expired, refresh needed`);
+        console.log(`🔄 Token for ${serviceName} expired, attempting refresh...`);
+        try {
+          const refreshed = await this.refreshTokens(serviceName);
+          return refreshed;
+        } catch (error) {
+          console.error(`❌ Token refresh failed for ${serviceName}:`, error.message);
+          return false;
+        }
       }
+      console.log(`⚠️  Token for ${serviceName} expired and no refresh token available`);
       return false;
     }
     
@@ -42,6 +61,47 @@ export class AuthManager {
   }
 
   /**
+   * Get valid tokens for a service, automatically refreshing if needed
+   */
+  async getValidTokens(serviceName) {
+    const isAuth = await this.isAuthorized(serviceName);
+    if (!isAuth) {
+      return null;
+    }
+    return this.tokenStore.get(serviceName);
+  }
+
+  /**
+   * Check if tokens need refresh soon (within 5 minutes of expiry)
+   */
+  needsRefreshSoon(serviceName) {
+    const tokens = this.tokenStore.get(serviceName);
+    if (!tokens || !tokens.expires_at || !tokens.refresh_token) {
+      return false;
+    }
+    
+    const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000);
+    return tokens.expires_at < fiveMinutesFromNow;
+  }
+
+  /**
+   * Proactively refresh tokens if they expire soon
+   */
+  async refreshIfNeeded(serviceName) {
+    if (this.needsRefreshSoon(serviceName)) {
+      console.log(`🔄 Proactively refreshing tokens for ${serviceName} (expire soon)`);
+      try {
+        await this.refreshTokens(serviceName);
+        return true;
+      } catch (error) {
+        console.error(`❌ Proactive refresh failed for ${serviceName}:`, error.message);
+        return false;
+      }
+    }
+    return true; // No refresh needed
+  }
+
+  /**
    * Store tokens for a service
    */
   storeTokens(serviceName, tokens) {
@@ -52,6 +112,95 @@ export class AuthManager {
     
     this.tokenStore.set(serviceName, tokens);
     console.log(`✅ Stored tokens for ${serviceName}`);
+  }
+
+  /**
+   * Refresh access tokens using a refresh token
+   */
+  async refreshTokens(serviceName) {
+    const tokens = this.tokenStore.get(serviceName);
+    if (!tokens || !tokens.refresh_token) {
+      throw new Error(`No refresh token available for ${serviceName}`);
+    }
+
+    // We need to reconstruct the OAuth client configuration for refresh
+    // This is tricky because we don't store the original OAuth config
+    // We'll need to discover the token endpoint again
+    
+    let tokenEndpoint;
+    let clientId;
+    
+    // Try to get token endpoint from stored metadata or rediscover it
+    if (tokens.token_endpoint) {
+      tokenEndpoint = tokens.token_endpoint;
+    } else {
+      // We need to rediscover the token endpoint
+      // This requires storing more metadata during initial authorization
+      throw new Error(`Token endpoint not available for ${serviceName}. Cannot refresh without stored OAuth metadata.`);
+    }
+    
+    if (tokens.client_id) {
+      clientId = tokens.client_id;
+    } else {
+      throw new Error(`Client ID not available for ${serviceName}. Cannot refresh without stored OAuth metadata.`);
+    }
+
+    console.log(`🔄 Refreshing tokens for ${serviceName}...`);
+
+    try {
+      const refreshResponse = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: tokens.refresh_token,
+          client_id: clientId
+        })
+      });
+
+      if (!refreshResponse.ok) {
+        const errorText = await refreshResponse.text();
+        throw new Error(`Token refresh failed: ${refreshResponse.status} ${refreshResponse.statusText} - ${errorText}`);
+      }
+
+      const newTokens = await refreshResponse.json();
+      
+      // Preserve metadata from original tokens and merge with new tokens
+      const updatedTokens = {
+        ...tokens, // Keep original metadata like token_endpoint, client_id
+        ...newTokens, // Override with new token data
+        refreshed_at: Date.now() // Track when refresh occurred
+      };
+      
+      // If no new refresh token provided, keep the old one
+      if (!newTokens.refresh_token && tokens.refresh_token) {
+        updatedTokens.refresh_token = tokens.refresh_token;
+      }
+      
+      // Store the updated tokens
+      this.storeTokens(serviceName, updatedTokens);
+      
+      console.log(`✅ Successfully refreshed tokens for ${serviceName}`, {
+        hasNewAccessToken: !!newTokens.access_token,
+        hasNewRefreshToken: !!newTokens.refresh_token,
+        expiresIn: newTokens.expires_in
+      });
+      
+      return true;
+      
+    } catch (error) {
+      console.error(`❌ Token refresh failed for ${serviceName}:`, error.message);
+      
+      // If refresh failed, the refresh token might be invalid/expired
+      // Remove the tokens so user can re-authorize
+      console.log(`🗑️  Removing invalid tokens for ${serviceName}`);
+      this.tokenStore.delete(serviceName);
+      
+      throw error;
+    }
   }
 
   /**
@@ -336,8 +485,18 @@ export class AuthManager {
         scope: tokenSet.scope
       });
       
-      // Return the complete token set as received from the OAuth provider
-      return tokenSet;
+      // Add OAuth metadata needed for token refresh
+      const enhancedTokenSet = {
+        ...tokenSet,
+        // Store OAuth client metadata for future refresh operations
+        token_endpoint: client.issuer.token_endpoint,
+        client_id: client.client_id,
+        // Track when tokens were originally obtained
+        issued_at: Date.now()
+      };
+      
+      // Return the enhanced token set with refresh metadata
+      return enhancedTokenSet;
       
     } catch (error) {
       console.error('❌ Token exchange error details:', {
@@ -361,5 +520,48 @@ export class AuthManager {
         this.authSessions.delete(sessionId);
       }
     }
+  }
+
+  /**
+   * Clean up expired tokens that cannot be refreshed
+   */
+  cleanupExpiredTokens() {
+    const now = Date.now();
+    const servicesToRemove = [];
+    
+    for (const [serviceName, tokens] of this.tokenStore.entries()) {
+      // If token is expired and we don't have a refresh token, remove it
+      if (tokens.expires_at && tokens.expires_at < now && !tokens.refresh_token) {
+        servicesToRemove.push(serviceName);
+      }
+    }
+    
+    for (const serviceName of servicesToRemove) {
+      console.log(`🗑️  Removing expired tokens for ${serviceName} (no refresh token)`);
+      this.tokenStore.delete(serviceName);
+    }
+  }
+
+  /**
+   * Get authorization status summary for all services
+   */
+  async getAuthorizationSummary() {
+    const summary = {};
+    
+    for (const [serviceName, tokens] of this.tokenStore.entries()) {
+      const isAuth = await this.isAuthorized(serviceName);
+      const needsRefresh = this.needsRefreshSoon(serviceName);
+      
+      summary[serviceName] = {
+        authorized: isAuth,
+        hasRefreshToken: !!tokens.refresh_token,
+        needsRefreshSoon: needsRefresh,
+        expiresAt: tokens.expires_at ? new Date(tokens.expires_at).toISOString() : null,
+        issuedAt: tokens.issued_at ? new Date(tokens.issued_at).toISOString() : null,
+        lastRefreshed: tokens.refreshed_at ? new Date(tokens.refreshed_at).toISOString() : null
+      };
+    }
+    
+    return summary;
   }
 }

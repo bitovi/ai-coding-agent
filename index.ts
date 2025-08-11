@@ -18,7 +18,6 @@ import { isServerAuthorized } from './src/auth/authUtils.js';
 import { PromptManager } from './src/prompts/PromptManager.js';
 import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
 import { EmailProvider } from './src/providers/EmailProvider.js';
-import { LegacyWebUIService } from './src/services/LegacyWebUIService.js';
 import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
 import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
 import { mergeParametersWithDefaults } from './public/js/prompt-utils.js';
@@ -40,7 +39,6 @@ class AICodingAgent {
   private claudeService: any;
   private emailService: EmailProvider;
   private authService: AuthService;
-  private webUIService: LegacyWebUIService;
   private authMiddleware: AuthMiddleware;
 
   constructor() {
@@ -55,7 +53,6 @@ class AICodingAgent {
     this.claudeService = ClaudeServiceProvider.create(this.executionHistoryService);
     this.emailService = new EmailProvider();
     this.authService = new AuthService(this.emailService);
-    this.webUIService = new LegacyWebUIService();
     this.authMiddleware = new AuthMiddleware(this.authService as any);
   }
 
@@ -125,31 +122,8 @@ class AICodingAgent {
   }
 
   setupRoutes(): void {
-    // Legacy routes FIRST - before any other middleware can interfere
-    // IMPORTANT: These routes must be defined first to prevent static file handling
-    this.app.get('/legacy/prompts/:promptName/activity.html', (req, res) => {
-      console.log('🔍 Legacy route hit for:', req.params.promptName);
-      const promptName = req.params.promptName;
-      this.webUIService.renderPromptActivityPage(req, res, {
-        promptName,
-        promptManager: this.promptManager,
-        executionHistoryService: this.executionHistoryService
-      });
-    });
-
-    // Test route to verify legacy routing works
-    this.app.get('/legacy/test', (req, res) => {
-      console.log('🔍 Legacy test route hit!');
-      res.send('<h1>Legacy route works!</h1><p>This confirms legacy routes are functioning.</p>');
-    });
-
     // Authentication routes
     // Note: /login route is now handled by React Router in the SPA
-    // The static login page is only served for non-browser requests or as fallback
-    this.app.get('/login-static', (req, res) => {
-      this.webUIService.renderLoginPage(req, res);
-    });
-
     this.app.post('/auth/request-login', async (req, res) => {
       try {
         const { email } = req.body;
@@ -295,7 +269,7 @@ class AICodingAgent {
             const mcpServer = this.configManager.getMcpServer(mcpServerName);
             
             // Use the new authUtils function that includes custom credential validation
-            const isAuthorized = isServerAuthorized(mcpServerName, mcpServer, this.authManager);
+            const isAuthorized = await isServerAuthorized(mcpServerName, mcpServer, this.authManager);
             if (!isAuthorized) {
               unauthorizedServers.push(mcpServerName);
             }

@@ -17,26 +17,26 @@ export interface GetPromptsDeps {
     getMcpServers: () => any[];
   };
   authManager: {
-    isAuthorized: (serverName: string) => boolean;
+    isAuthorized: (serverName: string) => Promise<boolean>;
   };
 }
 
 export function getPrompts(deps: GetPromptsDeps) {
   const { promptManager, configManager, authManager } = deps;
   
-  return (req: Request, res: Response) => {
+  return async (req: Request, res: Response) => {
     try {
       const prompts = promptManager.getPrompts() || [];
       const mcpServers = configManager.getMcpServers() || [];
 
-      const promptsWithConnections = prompts.map((prompt: any) => {
+      const promptsWithConnections = await Promise.all(prompts.map(async (prompt: any) => {
         const connections: Connection[] = [];
 
         // Add MCP server connections
         if (prompt.mcp_servers) {
-          prompt.mcp_servers.forEach((serverName: string) => {
+          for (const serverName of prompt.mcp_servers) {
             const server = mcpServers.find((s: any) => s.name === serverName);
-            const isAvailable = authManager.isAuthorized(serverName) || false;
+            const isAvailable = await authManager.isAuthorized(serverName) || false;
             
             connections.push({
               name: serverName,
@@ -52,7 +52,7 @@ export function getPrompts(deps: GetPromptsDeps) {
                 hasRefreshToken: false
               } : undefined
             });
-          });
+          }
         }
 
         // Add credential connections (if specified in prompt config)
@@ -87,7 +87,7 @@ export function getPrompts(deps: GetPromptsDeps) {
           canRun,
           connections
         };
-      });
+      }));
 
       // Return prompts data directly according to API specification
       res.json({ prompts: promptsWithConnections });
@@ -105,14 +105,14 @@ export interface GetPromptDeps {
     getMcpServers: () => any[];
   };
   authManager: {
-    isAuthorized: (serverName: string) => boolean;
+    isAuthorized: (serverName: string) => Promise<boolean>;
   };
 }
 
 export function getPrompt(deps: GetPromptDeps) {
   const { promptManager, configManager, authManager } = deps;
   
-  return (req: Request, res: Response) => {
+  return async (req: Request, res: Response) => {
     try {
       const { promptName } = req.params;
       const prompt = promptManager.getPrompt(promptName);
@@ -130,9 +130,9 @@ export function getPrompt(deps: GetPromptDeps) {
       const connections: Connection[] = [];
 
       if (prompt.mcp_servers) {
-        prompt.mcp_servers.forEach((serverName: string) => {
+        for (const serverName of prompt.mcp_servers) {
           const server = mcpServers.find((s: any) => s.name === serverName);
-          const isAvailable = authManager.isAuthorized(serverName) || false;
+          const isAvailable = await authManager.isAuthorized(serverName) || false;
           
           connections.push({
             name: serverName,
@@ -141,7 +141,7 @@ export function getPrompt(deps: GetPromptDeps) {
             isAvailable,
             authUrl: `/api/connections/mcp/${serverName}/authorize`
           });
-        });
+        }
       }
 
       const canRun = connections.every(conn => conn.isAvailable);
@@ -200,12 +200,14 @@ export function executePrompt(deps: ExecutePromptDeps) {
       
       // Check if all required MCP servers are authorized (match legacy behavior)
       const unauthorizedServers: string[] = [];
+
+
       if (prompt.mcp_servers) {
         for (const mcpServerName of prompt.mcp_servers) {
           const mcpServer = configManager.getMcpServer(mcpServerName);
           
           // Use the same authUtils function as legacy endpoint
-          const isAuthorized = isServerAuthorized(mcpServerName, mcpServer, authManager);
+          const isAuthorized = await isServerAuthorized(mcpServerName, mcpServer, authManager);
           if (!isAuthorized) {
             unauthorizedServers.push(mcpServerName);
           }

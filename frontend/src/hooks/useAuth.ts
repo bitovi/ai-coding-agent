@@ -16,6 +16,11 @@ export const useAuth = () => {
     queryKey: ['auth', 'user'],
     queryFn: async (): Promise<User | null> => {
       try {
+        // Add a small delay on initial load to ensure cookies are set
+        const isInitialLoad = !document.cookie.includes('ai-coding-agent-session');
+        if (isInitialLoad && window.location.search.includes('success=login')) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
         const response = await fetch('/api/user', {
           credentials: 'include',
           headers: {
@@ -23,6 +28,8 @@ export const useAuth = () => {
             'Content-Type': 'application/json',
           },
         });
+        
+        console.log('🔍 Auth response status:', response.status);
         
         if (response.status === 401) {
           // Not authenticated - this is expected for unauthenticated users
@@ -42,6 +49,8 @@ export const useAuth = () => {
     },
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    // Force a refetch when coming back from login
+    refetchOnMount: window.location.search.includes('success=login') ? 'always' : true,
   });
 };
 
