@@ -17,5 +17,14 @@
     "tool_configuration": {
       "enabled": true
     }
+  },
+  {
+    "name": "figma",
+    "type": "url", 
+    "url": "https://figma.com/mcp/",
+    "authorization_token": "my-auth-token",
+    "tool_configuration": {
+      "enabled": true
+    }
   }
 ]

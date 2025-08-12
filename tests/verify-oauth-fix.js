@@ -40,7 +40,8 @@ console.log('✅ The Atlassian MCP OAuth flow is now fixed and working!');
   const authManager = new AuthManager();
   console.log('');
   console.log('🔍 Checking if jira service has valid tokens...');
-  const isAuthorized = await authManager.isAuthorized('jira');
+  const mockJiraServer = { name: 'jira', type: 'url' }; // Minimal server config for test
+  const isAuthorized = await authManager.isAuthorized(mockJiraServer);
   if (isAuthorized) {
     console.log('✅ Jira service is authorized');
     const tokens = authManager.getTokens('jira');
