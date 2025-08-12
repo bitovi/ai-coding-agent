@@ -145,11 +145,11 @@
   {
     "name": "create-commit-and-push",
     "connections": { "claude_code": ["git-credentials"] },
-    "mcp_servers": ["jira"],
+    "mcp_servers": ["jira", "figma"],
     "messages": [
       {
         "role": "user",
-        "content": "Complete in the following steps -- do NOT execute a step BEFORE fully processing the step's instructions. For all steps, use https methods that will work with a .git-credentials file.\n1. If there is already a local copy of '{{repository}}' in the current working directory, update it to the latest version by running 'git pull' inside that respository folder and proceed to Step 2. Otherwise, clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. After cloning the directory, navigate into the newly cloned directory. \n2.Review the Jira ticket associated with the provided ticket number {{ticketNumber}}.\n3. Use git tools to change to a new branch, the name of the branch will be the ticket number.\n4. Implement the changes/additions/updates as specified in the Jira ticket.\n5. Commit the changes to the current branch. For the commit message, provide a one sentence description summary of the changes made.\n6. Push the changes and the new branch to the origin remote. Use the upstream flag.",
+        "content": "Complete in the following steps -- do NOT execute a step BEFORE fully processing the step's instructions. For all steps, use https methods that will work with a .git-credentials file.\n1. If there is already a local copy of '{{repository}}' in the current working directory, update it to the latest version by running 'git pull' inside that respository folder and proceed to Step 2. Otherwise, clone the GitHub repository '{{repository}}' to the current working directory using git tools. Make sure to clone it into the current working directory where this process is running, not into any parent directories. After cloning the directory, navigate into the newly cloned directory. \n2.Review the Jira ticket associated with the provided ticket number {{ticketNumber}}.\n3. Use git tools to change to a new branch, the name of the branch will be the ticket number. If the branch already exists switch to that branch and run 'git pull', \n4. Implement the changes/additions/updates as specified in the Jira ticket.\n5. Commit the changes to the current branch. For the commit message, provide a one sentence description summary of the changes made.\n6. Push the changes and the new branch to the origin remote. Use the upstream flag.",
         "parameters": {
           "type": "object",
           "properties": {

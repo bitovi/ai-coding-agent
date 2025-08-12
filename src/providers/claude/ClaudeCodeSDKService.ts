@@ -261,7 +261,7 @@ export class ClaudeCodeSDKService {
     const allowedTools: string[] = [];
 
     // Add basic tools
-    allowedTools.push('Read', 'Write', 'Bash');
+    allowedTools.push('Read', 'Write', 'Bash', 'WebFetch');
 
     // Add MCP base tool
     allowedTools.push('mcp');
