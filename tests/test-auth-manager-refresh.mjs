@@ -34,7 +34,8 @@ async function testRefreshTokenFunctionality() {
   
   // Test 3: Check authorization status
   console.log('📋 Test 3: Check authorization status');
-  const isAuthorized = await authManager.isAuthorized('jira');
+  const mockServer = { name: 'jira', type: 'url' }; // Minimal server config for test
+  const isAuthorized = await authManager.isAuthorized(mockServer);
   console.log('Is authorized:', isAuthorized);
   console.log('✅ Authorization check passed\n');
   
@@ -62,7 +63,8 @@ async function testRefreshTokenFunctionality() {
   authManager.storeTokens('jira-expired', expiredTokens);
   
   // This should return false and log refresh attempt (which will fail due to mock endpoint)
-  const isExpiredAuthorized = await authManager.isAuthorized('jira-expired');
+  const mockExpiredServer = { name: 'jira-expired', type: 'url' }; // Minimal server config for test
+  const isExpiredAuthorized = await authManager.isAuthorized(mockExpiredServer);
   console.log('Is expired token authorized:', isExpiredAuthorized);
   console.log('✅ Expired token handling test completed\n');
   

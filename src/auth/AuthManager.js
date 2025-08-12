@@ -3,7 +3,7 @@ import express from 'express';
 import open from 'open';
 import fetch from 'node-fetch';
 import { URL } from 'url';
-import { EncryptedTokensFolderProvider } from '../providers/EncryptedTokensFolderProvider.ts';
+import { EncryptedTokensFolderProvider } from '../providers/EncryptedTokensFolderProvider.js';
 
 /**
  * Manages OAuth authorization flows for MCP services
@@ -23,13 +23,27 @@ export class AuthManager {
     }
     
     this.authSessions = new Map(); // Maps session ID to auth session data (always in-memory)
+    this.refreshPromises = new Map(); // Track ongoing refresh operations to prevent duplicates
     this.defaultRedirectUri = process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/oauth/callback';
   }
 
   /**
    * Check if a service is authorized (has valid tokens)
+   * @param {object} mcpServer - MCP server configuration object (should be from ConfigManager for env var support)
    */
-  async isAuthorized(serviceName) {
+  async isAuthorized(mcpServer) {
+    if (!mcpServer || !mcpServer.name) {
+      throw new Error('mcpServer must be provided with a name property');
+    }
+
+    const serviceName = mcpServer.name;
+
+    // Check for authorization_token in MCP server config (includes env vars if from ConfigManager)
+    if (mcpServer.authorization_token) {
+      return true;
+    }
+
+    // Fallback to existing OAuth token logic
     const tokens = this.tokenStore.get(serviceName);
     if (!tokens) return false;
     
@@ -39,7 +53,7 @@ export class AuthManager {
       if (tokens.refresh_token) {
         console.log(`🔄 Token for ${serviceName} expired, attempting refresh...`);
         try {
-          const refreshed = await this.refreshTokens(serviceName);
+          const refreshed = await this.refreshTokensWithLock(serviceName);
           return refreshed;
         } catch (error) {
           console.error(`❌ Token refresh failed for ${serviceName}:`, error.message);
@@ -62,13 +76,14 @@ export class AuthManager {
 
   /**
    * Get valid tokens for a service, automatically refreshing if needed
+   * @param {object} mcpServer - MCP server configuration object
    */
-  async getValidTokens(serviceName) {
-    const isAuth = await this.isAuthorized(serviceName);
+  async getValidTokens(mcpServer) {
+    const isAuth = await this.isAuthorized(mcpServer);
     if (!isAuth) {
       return null;
     }
-    return this.tokenStore.get(serviceName);
+    return this.tokenStore.get(mcpServer.name);
   }
 
   /**
@@ -200,6 +215,49 @@ export class AuthManager {
       this.tokenStore.delete(serviceName);
       
       throw error;
+    }
+  }
+
+  /**
+   * Refresh tokens with lock to prevent concurrent refresh attempts
+   * @param {string} serviceName - Name of the service
+   * @returns {Promise<boolean>} True if refresh succeeded
+   */
+  async refreshTokensWithLock(serviceName) {
+    // Check if there's already a refresh in progress for this service
+    if (this.refreshPromises.has(serviceName)) {
+      console.log(`⏳ Token refresh already in progress for ${serviceName}, waiting...`);
+      try {
+        // Wait for the existing refresh to complete
+        const result = await this.refreshPromises.get(serviceName);
+        console.log(`✅ Waited for existing refresh for ${serviceName}, result: ${result}`);
+        return result;
+      } catch (error) {
+        console.error(`❌ Existing refresh failed for ${serviceName}:`, error.message);
+        return false;
+      }
+    }
+
+    // Start a new refresh operation
+    const refreshPromise = this.refreshTokens(serviceName)
+      .then(() => {
+        // Clean up the promise after successful refresh
+        this.refreshPromises.delete(serviceName);
+        return true;
+      })
+      .catch((error) => {
+        // Clean up the promise after failed refresh
+        this.refreshPromises.delete(serviceName);
+        throw error;
+      });
+
+    // Store the promise so other concurrent requests can wait for it
+    this.refreshPromises.set(serviceName, refreshPromise);
+
+    try {
+      return await refreshPromise;
+    } catch (error) {
+      return false;
     }
   }
 
@@ -543,13 +601,42 @@ export class AuthManager {
   }
 
   /**
+   * Check if a service has valid OAuth tokens (internal method for stored tokens only)
+   * @param {string} serviceName - Name of the service
+   * @private
+   */
+  async _isOAuthAuthorized(serviceName) {
+    const tokens = this.tokenStore.get(serviceName);
+    if (!tokens) return false;
+    
+    // Check if token is still valid (basic expiration check)
+    if (tokens.expires_at && tokens.expires_at < Date.now()) {
+      // Token expired, try to refresh if we have a refresh token
+      if (tokens.refresh_token) {
+        console.log(`🔄 Token for ${serviceName} expired, attempting refresh...`);
+        try {
+          const refreshed = await this.refreshTokensWithLock(serviceName);
+          return refreshed;
+        } catch (error) {
+          console.error(`❌ Token refresh failed for ${serviceName}:`, error.message);
+          return false;
+        }
+      }
+      console.log(`⚠️  Token for ${serviceName} expired and no refresh token available`);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * Get authorization status summary for all services
    */
   async getAuthorizationSummary() {
     const summary = {};
     
     for (const [serviceName, tokens] of this.tokenStore.entries()) {
-      const isAuth = await this.isAuthorized(serviceName);
+      const isAuth = await this._isOAuthAuthorized(serviceName);
       const needsRefresh = this.needsRefreshSoon(serviceName);
       
       summary[serviceName] = {
