@@ -1,0 +1,65 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Build-Server:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.vm_url}}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Generate .env and repo_env
+        run: |
+          ./scripts/generate-build-env.sh
+        env:
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_JIRA_INTEGRATIONS }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_JIRA_INTEGRATIONS }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EMAIL: ${{ secrets.EMAIL }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          BASE_URL: ${{ vars.BASE_URL }}
+          PORT: ${{ vars.PORT }}
+          MCP_SERVERS: ${{ vars.MCP_SERVERS }}
+          PROMPTS: ${{ vars.PROMPTS }}
+          WORKING_DIR: ${{ secrets.WORKING_DIR }}
+          GIT_HOME_DIR: ${{ secrets.GIT_HOME_DIR }}
+          GIT_AUTHOR_NAME: ${{ secrets.GIT_AUTHOR_NAME }}
+          GIT_AUTHOR_EMAIL: ${{ secrets.GIT_AUTHOR_EMAIL }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+          OAUTH_REDIRECT_URI: ${{ vars.OAUTH_REDIRECT_URI }}
+
+      - id: deploy
+        name: Deploy
+        uses: bitovi/github-actions-deploy-docker-to-ec2@v1
+        with:
+          checkout: false
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID_JIRA_INTEGRATIONS}}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY_JIRA_INTEGRATIONS}}
+          aws_default_region: us-east-1
+
+          tf_state_bucket_destroy: true
+
+          aws_r53_enable: true
+          aws_r53_create_sub_cert: true
+          aws_r53_sub_domain_name: ${{ vars.AWS_R53_SUB_DOMAIN_NAME_STAGING || 'bit-staging' }}
+          aws_r53_domain_name: ovi-coding-agent.com
+          aws_elb_app_port: 3000
+
+          docker_full_cleanup: true
+
+          aws_ec2_instance_type: t3.small
+          aws_ec2_instance_root_vol_size: 16
+
+          repo_env: repo_env
+          env_ghs: ${{ secrets.DOT_ENV_STAGING }}
