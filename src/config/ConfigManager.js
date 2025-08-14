@@ -106,11 +106,42 @@ export class ConfigManager {
   }
 
   getMcpServers() {
-    return Array.from(this.mcpServers.values());
+    return Array.from(this.mcpServers.values()).map(server => {
+      // Clone the server to avoid modifying the original
+      const enrichedServer = { ...server };
+
+      // If no authorization_token in config, check environment variable
+      if (!enrichedServer.authorization_token) {
+        const envTokenKey = `MCP_${server.name}_authorization_token`;
+        const envToken = process.env[envTokenKey];
+        if (envToken) {
+          enrichedServer.authorization_token = envToken;
+        }
+      }
+
+      return enrichedServer;
+    });
   }
 
   getMcpServer(name) {
-    return this.mcpServers.get(name);
+    const server = this.mcpServers.get(name);
+    if (!server) {
+      return undefined;
+    }
+
+    // Clone the server to avoid modifying the original
+    const enrichedServer = { ...server };
+
+    // If no authorization_token in config, check environment variable
+    if (!enrichedServer.authorization_token) {
+      const envTokenKey = `MCP_${name}_authorization_token`;
+      const envToken = process.env[envTokenKey];
+      if (envToken) {
+        enrichedServer.authorization_token = envToken;
+      }
+    }
+
+    return enrichedServer;
   }
 
   getConfig() {
@@ -150,22 +181,14 @@ export class ConfigManager {
         mcpServer.url = server.url;
       }
 
-      // Add authorization token
+      // Add authorization token (already enriched with env vars by getMcpServer)
       if (server.authorization_token) {
         mcpServer.authorization_token = server.authorization_token;
       } else {
-        // Check for environment variable override: MCP_{name}_authorization_token
-        const envTokenKey = `MCP_${serverName}_authorization_token`;
-        const envToken = process.env[envTokenKey];
-        
-        if (envToken) {
-          mcpServer.authorization_token = envToken;
-        } else {
-          // Fallback to OAuth tokens from AuthManager
-          const tokens = authManager.getTokens(serverName);
-          if (tokens && tokens.access_token) {
-            mcpServer.authorization_token = tokens.access_token;
-          }
+        // Fallback to OAuth tokens from AuthManager
+        const tokens = authManager.getTokens(serverName);
+        if (tokens && tokens.access_token) {
+          mcpServer.authorization_token = tokens.access_token;
         }
       }
 

@@ -38,24 +38,21 @@ function validateGitHubCredentials(server) {
 
 /**
  * Check if an MCP server is authorized using priority order:
- * 1. Pre-configured authorization_token in config
- * 2. Environment variable: MCP_{serverName}_authorization_token  
- * 3. OAuth tokens from AuthManager
- * 4. Custom credential validation (server-specific)
+ * 1. Pre-configured authorization_token in config (includes env vars if from ConfigManager)
+ * 2. OAuth tokens from AuthManager
+ * 3. Custom credential validation (server-specific)
  * 
  * @param {string} serverName - Name of the MCP server
- * @param {Object} server - Server configuration object
+ * @param {Object} server - Server configuration object (should be from ConfigManager for env var support)
  * @param {Object} authManager - AuthManager instance
  * @returns {Promise<boolean>} True if the server is authorized
  */
 export async function isServerAuthorized(serverName, server, authManager) {
   const hasConfigToken = server && server.authorization_token;
-  const envTokenKey = `MCP_${serverName}_authorization_token`;
-  const hasEnvToken = process.env[envTokenKey];
-  const hasOAuthToken = await authManager.isAuthorized(serverName);
+  const hasOAuthToken = await authManager.isAuthorized(server);
   
   // Check standard auth methods first
-  if (hasConfigToken || hasEnvToken || hasOAuthToken) {
+  if (hasConfigToken || hasOAuthToken) {
     return true;
   }
   
@@ -99,28 +96,30 @@ const credentialValidators = {
  * Get authorization status details for debugging/logging
  * 
  * @param {string} serverName - Name of the MCP server
- * @param {Object} server - Server configuration object
+ * @param {Object} server - Server configuration object (should be from ConfigManager for env var support)
  * @param {Object} authManager - AuthManager instance
  * @returns {Promise<Object>} Object with detailed authorization status
  */
 export async function getAuthorizationDetails(serverName, server, authManager) {
   const hasConfigToken = server && server.authorization_token;
-  const envTokenKey = `MCP_${serverName}_authorization_token`;
-  const hasEnvToken = process.env[envTokenKey];
-  const hasOAuthToken = await authManager.isAuthorized(serverName);
+  const hasOAuthToken = await authManager.isAuthorized(server);
   const hasCustomCredentials = checkCustomCredentials(serverName, server);
   
-  const authMethod = hasConfigToken ? 'config' : 
-                    hasEnvToken ? 'environment' : 
+  // Check if the config token came from environment variable
+  const envTokenKey = `MCP_${serverName}_authorization_token`;
+  const hasEnvToken = process.env[envTokenKey];
+  const isEnvToken = hasConfigToken && hasEnvToken && server.authorization_token === hasEnvToken;
+  
+  const authMethod = hasConfigToken ? (isEnvToken ? 'environment' : 'config') : 
                     hasOAuthToken ? 'oauth' : 
                     hasCustomCredentials ? 'custom' : 'none';
   
   return {
     serverName,
-    isAuthorized: hasConfigToken || hasEnvToken || hasOAuthToken || hasCustomCredentials,
+    isAuthorized: hasConfigToken || hasOAuthToken || hasCustomCredentials,
     authMethod,
     hasConfigToken,
-    hasEnvToken,
+    hasEnvToken: isEnvToken,
     hasOAuthToken,
     hasCustomCredentials,
     envTokenKey

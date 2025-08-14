@@ -179,8 +179,8 @@ describe('getConnections', () => {
       timestamp: expect.any(String)
     });
 
-    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith('jira');
-    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith('github');
+    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith(mockMcpServers[0]);
+    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith(mockMcpServers[1]);
   });
 
   it('should handle MCP servers without descriptions', async () => {
@@ -321,5 +321,110 @@ describe('getConnections', () => {
     expect(connectionNames).toContain('slack');
     expect(connectionNames).toContain('git-credentials');
     expect(connectionNames).toContain('docker-registry');
+  });
+
+  it('should return true for servers with authorization_token in config', async () => {
+    // Arrange
+    const commonModule = require('./common.js');
+    const mockMcpServers = [
+      {
+        name: 'figma',
+        description: 'Figma integration',
+        url: 'https://figma.com/mcp/',
+        authorization_token: 'my-figma-auth-token',
+        scopes: ['design:read']
+      }
+    ];
+
+    mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
+    mockDeps.authManager!.isAuthorized = jest.fn().mockResolvedValue(true); // Should return true for config token
+
+    commonModule.checkConnectionAvailability.mockReturnValue(false);
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
+
+    // Act
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+
+    // Assert
+    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith(mockMcpServers[0]);
+    
+    const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+    const figmaConnection = response.data.connections.find((c: any) => c.name === 'figma');
+    
+    expect(figmaConnection.isAvailable).toBe(true);
+    expect(figmaConnection.description).toBe('Figma integration');
+  });
+
+  it('should return true for servers with environment authorization token', async () => {
+    // Arrange
+    const commonModule = require('./common.js');
+    const originalEnv = process.env.MCP_github_authorization_token;
+    process.env.MCP_github_authorization_token = 'env-auth-token';
+
+    const mockMcpServers = [
+      {
+        name: 'github',
+        description: 'GitHub integration',
+        url: 'https://api.github.com',
+        authorization_token: null,
+        scopes: ['repo']
+      }
+    ];
+
+    mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
+    mockDeps.authManager!.isAuthorized = jest.fn().mockResolvedValue(true); // Should return true for env token
+
+    commonModule.checkConnectionAvailability.mockReturnValue(false);
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
+
+    // Act
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+
+    // Assert
+    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith(mockMcpServers[0]);
+    
+    const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+    const githubConnection = response.data.connections.find((c: any) => c.name === 'github');
+    
+    expect(githubConnection.isAvailable).toBe(true);
+
+    // Cleanup
+    if (originalEnv !== undefined) {
+      process.env.MCP_github_authorization_token = originalEnv;
+    } else {
+      delete process.env.MCP_github_authorization_token;
+    }
+  });
+
+  it('should prioritize config authorization_token over OAuth tokens', async () => {
+    // Arrange
+    const commonModule = require('./common.js');
+    const mockMcpServers = [
+      {
+        name: 'priority-test',
+        description: 'Priority test server',
+        url: 'https://api.test.com',
+        authorization_token: 'config-token-priority',
+        scopes: ['read']
+      }
+    ];
+
+    mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue(mockMcpServers);
+    // Even if OAuth would return false, config token should make this true
+    mockDeps.authManager!.isAuthorized = jest.fn().mockResolvedValue(true);
+
+    commonModule.checkConnectionAvailability.mockReturnValue(false);
+    commonModule.getConnectionDetails.mockImplementation(() => ({}));
+
+    // Act
+    await getConnections(mockDeps)(mockReq as Request, mockRes as Response);
+
+    // Assert
+    expect(mockDeps.authManager!.isAuthorized).toHaveBeenCalledWith(mockMcpServers[0]);
+    
+    const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+    const testConnection = response.data.connections.find((c: any) => c.name === 'priority-test');
+    
+    expect(testConnection.isAvailable).toBe(true);
   });
 });

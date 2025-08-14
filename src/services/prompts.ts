@@ -17,7 +17,7 @@ export interface GetPromptsDeps {
     getMcpServers: () => any[];
   };
   authManager: {
-    isAuthorized: (serverName: string) => Promise<boolean>;
+    isAuthorized: (mcpServer: any) => Promise<boolean>;
   };
 }
 
@@ -36,7 +36,7 @@ export function getPrompts(deps: GetPromptsDeps) {
         if (prompt.mcp_servers) {
           for (const serverName of prompt.mcp_servers) {
             const server = mcpServers.find((s: any) => s.name === serverName);
-            const isAvailable = await authManager.isAuthorized(serverName) || false;
+            const isAvailable = server ? await authManager.isAuthorized(server) || false : false;
             
             connections.push({
               name: serverName,
@@ -105,7 +105,7 @@ export interface GetPromptDeps {
     getMcpServers: () => any[];
   };
   authManager: {
-    isAuthorized: (serverName: string) => Promise<boolean>;
+    isAuthorized: (mcpServer: any) => Promise<boolean>;
   };
 }
 
@@ -132,7 +132,7 @@ export function getPrompt(deps: GetPromptDeps) {
       if (prompt.mcp_servers) {
         for (const serverName of prompt.mcp_servers) {
           const server = mcpServers.find((s: any) => s.name === serverName);
-          const isAvailable = await authManager.isAuthorized(serverName) || false;
+          const isAvailable = server ? await authManager.isAuthorized(server) || false : false;
           
           connections.push({
             name: serverName,

@@ -78,7 +78,8 @@ async function testPromptMcpPipeline() {
     });
 
     console.log(`   ✅ Loaded ${configManager.getMcpServers().length} MCP servers from config`);
-    const isJiraAuthorized = await authManager.isAuthorized('jira-mcp');
+    const jiraMcpServer = configManager.getMcpServer('jira-mcp') || { name: 'jira-mcp', type: 'url' };
+    const isJiraAuthorized = await authManager.isAuthorized(jiraMcpServer);
     console.log(`   ✅ jira-mcp OAuth token stored: ${isJiraAuthorized}`);
 
     // 5. Test ConfigManager.prepareMcpServersForClaude()
@@ -131,7 +132,7 @@ async function testPromptMcpPipeline() {
       const hasConfigToken = server?.authorization_token;
       const envTokenKey = `MCP_${serverName}_authorization_token`;
       const hasEnvToken = process.env[envTokenKey];
-      const hasOAuthToken = await authManager.isAuthorized(serverName);
+      const hasOAuthToken = await authManager.isAuthorized(server || { name: serverName, type: 'url' });
       
       console.log(`   ${serverName}:`);
       console.log(`     📋 Config token: ${hasConfigToken ? 'Yes' : 'No'}`);
