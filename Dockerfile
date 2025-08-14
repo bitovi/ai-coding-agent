@@ -1,5 +1,6 @@
 FROM node:20-alpine
 
+ENV HOME=/home/appuser
 # Install system dependencies
 RUN apk add --no-cache \
     git \

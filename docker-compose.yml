@@ -1,0 +1,13 @@
+services:
+  ai-coding-agent:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - DISABLE_AUTH=true
+      - NODE_ENV=development
+    volumes:
+      - ./shared:/shared
+    restart: unless-stopped
