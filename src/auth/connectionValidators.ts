@@ -44,20 +44,11 @@ export function getGitCredentialDetails(): GitCredentialDetails {
 }
 
 /**
- * Validate Docker registry credentials
- * @returns True if docker credentials are available
- */
-export function validateDockerCredentials(): boolean {
-  return !!(process.env.DOCKER_USERNAME && process.env.DOCKER_PASSWORD);
-}
-
-/**
  * Registry of connection validators
  * Maps connection names to their validator functions
  */
 export const connectionValidators: Record<string, () => boolean> = {
-  'git-credentials': validateGitCredentials,
-  'docker-registry': validateDockerCredentials
+  'git-credentials': validateGitCredentials
 };
 
 /**
