@@ -1,4 +1,4 @@
-import { validateGitCredentials } from './gitCredentials.js';
+import { hasGitCredentials } from '../connections/special/git-credentials.js';
 
 /**
  * Utility functions for authentication checking
@@ -87,7 +87,7 @@ function checkCustomCredentials(serverName, server) {
  * Each validator function takes the server config and returns boolean
  */
 const credentialValidators = {
-  'git-mcp-server': validateGitCredentials,
+  'git-mcp-server': hasGitCredentials,
   'github-repo': validateGitHubCredentials,
   'github': validateGitHubCredentials
 };

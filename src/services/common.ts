@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 import type { ApiResponse } from '../types/index.js';
 import { 
-  validateGitCredentials, 
+  hasGitCredentials, 
   getGitCredentialDetails, 
-  isConnectionAvailable as checkConnectionValidator,
   type GitCredentialDetails 
+} from '../connections/special/git-credentials.js';
+import { 
+  isConnectionAvailable as checkConnectionValidator
 } from '../auth/connectionValidators.js';
 
 // Dependencies interface for dependency injection
@@ -43,7 +45,7 @@ export function isBrowserRequest(req: Request): boolean {
 export function checkConnectionAvailability(connectionType: string): boolean {
   switch (connectionType) {
     case 'git-credentials':
-      return validateGitCredentials();
+      return hasGitCredentials();
     case 'docker-registry':
       return !!(process.env.DOCKER_USERNAME && process.env.DOCKER_PASSWORD);
     default:

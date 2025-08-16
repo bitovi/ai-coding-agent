@@ -2,11 +2,11 @@
 
 /**
  * Test script for Git credentials validation
- * Tests the validateGitCredentials function with prepared server configurations
+ * Tests the hasGitCredentials function with prepared server configurations
  */
 
 import dotenv from 'dotenv';
-import { validateGitCredentials, getGitCredentialDetails } from '../src/auth/gitCredentials.js';
+import { hasGitCredentials, getGitCredentialDetails } from '../src/connections/special/git-credentials.ts';
 import { ConfigManager } from '../src/config/ConfigManager.js';
 
 dotenv.config();
@@ -27,10 +27,10 @@ function createTestServerConfig() {
 }
 
 /**
- * Test validateGitCredentials with different server configurations
+ * Test hasGitCredentials with different server configurations
  */
-async function testValidateGitCredentials() {
-  console.log('🔧 Testing validateGitCredentials Function\n');
+async function testHasGitCredentials() {
+  console.log('🔧 Testing hasGitCredentials Function\n');
 
   try {
     // Test 1: Load actual MCP server configuration
@@ -48,8 +48,8 @@ async function testValidateGitCredentials() {
         console.log(`   Transport: ${actualGitServer.transport}`);
         console.log(`   HOME: ${actualGitServer.env?.HOME || 'Not set'}`);
         
-        const result1 = validateGitCredentials(actualGitServer);
-        console.log(`   validateGitCredentials result: ${result1 ? '✅ Valid' : '❌ Invalid'}`);
+        const result1 = hasGitCredentials(actualGitServer);
+        console.log(`   hasGitCredentials result: ${result1 ? '✅ Valid' : '❌ Invalid'}`);
         
         const details1 = getGitCredentialDetails(actualGitServer);
         console.log(`   Git home: ${details1.gitHome || 'Not found'}`);
@@ -72,8 +72,8 @@ async function testValidateGitCredentials() {
     console.log(`   HOME: ${testServer.env.HOME}`);
     console.log(`   GIT_WORKING_DIR: ${testServer.env.GIT_WORKING_DIR}`);
     
-    const result2 = validateGitCredentials(testServer);
-    console.log(`   validateGitCredentials result: ${result2 ? '✅ Valid' : '❌ Invalid'}`);
+    const result2 = hasGitCredentials(testServer);
+    console.log(`   hasGitCredentials result: ${result2 ? '✅ Valid' : '❌ Invalid'}`);
     
     const details2 = getGitCredentialDetails(testServer);
     console.log(`   Git home: ${details2.gitHome || 'Not found'}`);
@@ -94,8 +94,8 @@ async function testValidateGitCredentials() {
     };
     
     console.log(`   Custom HOME: ${customServer.env.HOME}`);
-    const result3 = validateGitCredentials(customServer);
-    console.log(`   validateGitCredentials result: ${result3 ? '✅ Valid' : '❌ Invalid'}`);
+    const result3 = hasGitCredentials(customServer);
+    console.log(`   hasGitCredentials result: ${result3 ? '✅ Valid' : '❌ Invalid'}`);
     
     const details3 = getGitCredentialDetails(customServer);
     console.log(`   Git home: ${details3.gitHome || 'Not found'}`);
@@ -116,8 +116,8 @@ async function testValidateGitCredentials() {
     };
     
     console.log(`   Invalid HOME: ${invalidServer.env.HOME}`);
-    const result4 = validateGitCredentials(invalidServer);
-    console.log(`   validateGitCredentials result: ${result4 ? '✅ Valid' : '❌ Invalid'}`);
+    const result4 = hasGitCredentials(invalidServer);
+    console.log(`   hasGitCredentials result: ${result4 ? '✅ Valid' : '❌ Invalid'}`);
     
     const details4 = getGitCredentialDetails(invalidServer);
     console.log(`   Git home: ${details4.gitHome || 'Not found'}`);
@@ -180,7 +180,7 @@ function showUsageInstructions(hasValidCredentials) {
  * Main test function
  */
 async function main() {
-  const hasValidCredentials = await testValidateGitCredentials();
+  const hasValidCredentials = await testHasGitCredentials();
   
   showUsageInstructions(hasValidCredentials);
   
@@ -189,7 +189,7 @@ async function main() {
   
   if (hasValidCredentials) {
     console.log('🎉 Git credentials validation: PASSED');
-    console.log('   The validateGitCredentials function is working correctly!');
+    console.log('   The hasGitCredentials function is working correctly!');
     return true;
   } else {
     console.log('⚠️  Git credentials validation: FAILED');

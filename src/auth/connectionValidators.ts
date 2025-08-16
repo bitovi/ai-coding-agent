@@ -1,6 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { 
+  hasGitCredentials as hasGitCredentialsCore,
+  getGitCredentialDetails as getGitCredentialDetailsCore 
+} from '../connections/special/git-credentials.js';
 
 /**
  * Connection validators for different types of environment dependencies
@@ -31,65 +32,7 @@ export interface ConnectionStatus {
  * @returns True if git credentials are configured
  */
 export function validateGitCredentials(): boolean {
-  // Check multiple possible locations for git credentials
-  const possibleHomes = [
-    process.env.HOME,
-    os.homedir(),
-    '/home/appuser', // Docker container path
-    process.env.GIT_HOME_DIR
-  ].filter(Boolean);
-
-  for (const homeDir of possibleHomes) {
-    if (hasGitCredentialsFile(homeDir) || hasValidSshKeys(homeDir)) {
-      return true;
-    }
-  }
-
-  // Also check if GIT_TOKEN environment variable is available
-  return !!process.env.GIT_TOKEN;
-}
-
-/**
- * Check if .git-credentials file exists and is readable
- * @param homeDir - Home directory path
- * @returns True if .git-credentials file exists
- */
-function hasGitCredentialsFile(homeDir: string): boolean {
-  try {
-    const gitCredentialsPath = path.join(homeDir, '.git-credentials');
-    return fs.existsSync(gitCredentialsPath) && fs.statSync(gitCredentialsPath).isFile();
-  } catch (error) {
-    return false;
-  }
-}
-
-/**
- * Check if valid SSH keys exist
- * @param homeDir - Home directory path
- * @returns True if SSH keys are available
- */
-function hasValidSshKeys(homeDir: string): boolean {
-  try {
-    const sshDir = path.join(homeDir, '.ssh');
-    
-    if (!fs.existsSync(sshDir)) {
-      return false;
-    }
-    
-    // Common SSH key file names
-    const sshKeyFiles = ['id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'];
-    
-    for (const keyFile of sshKeyFiles) {
-      const keyPath = path.join(sshDir, keyFile);
-      if (fs.existsSync(keyPath) && fs.statSync(keyPath).isFile()) {
-        return true;
-      }
-    }
-    
-    return false;
-  } catch (error) {
-    return false;
-  }
+  return hasGitCredentialsCore();
 }
 
 /**
@@ -97,40 +40,7 @@ function hasValidSshKeys(homeDir: string): boolean {
  * @returns Detailed credential status
  */
 export function getGitCredentialDetails(): GitCredentialDetails {
-  const possibleHomes = [
-    process.env.HOME,
-    os.homedir(),
-    '/home/appuser',
-    process.env.GIT_HOME_DIR
-  ].filter(Boolean);
-
-  const details: GitCredentialDetails = {
-    hasCredentials: false,
-    hasGitToken: !!process.env.GIT_TOKEN,
-    credentialSources: [],
-    checkedPaths: []
-  };
-
-  for (const homeDir of possibleHomes) {
-    details.checkedPaths.push(homeDir);
-    
-    if (hasGitCredentialsFile(homeDir)) {
-      details.hasCredentials = true;
-      details.credentialSources.push(`git-credentials in ${homeDir}`);
-    }
-    
-    if (hasValidSshKeys(homeDir)) {
-      details.hasCredentials = true;
-      details.credentialSources.push(`SSH keys in ${homeDir}`);
-    }
-  }
-
-  if (details.hasGitToken) {
-    details.hasCredentials = true;
-    details.credentialSources.push('GIT_TOKEN environment variable');
-  }
-
-  return details;
+  return getGitCredentialDetailsCore();
 }
 
 /**
