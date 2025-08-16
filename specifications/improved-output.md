@@ -1,6 +1,104 @@
 
 
 
+## Initialization Message
+
+```
+{
+  "type": "system",
+  "subtype": "init",
+  "cwd": "/Users/justinmeyer/dev/ai-coding-agent/shared-repos/claude-code-sdk-service",
+  "session_id": "0ce8853f-aabe-488c-bbc2-a05f10b1cdc3",
+  "tools": [
+    "Task",
+    "Bash",
+    "Glob",
+    "Grep",
+    "LS",
+    "ExitPlanMode",
+    "Read",
+    "Edit",
+    "MultiEdit",
+    "Write",
+    "NotebookEdit",
+    "WebFetch",
+    "TodoWrite",
+    "WebSearch",
+    "BashOutput",
+    "KillBash",
+    "mcp__jira__atlassianUserInfo",
+    "mcp__jira__getAccessibleAtlassianResources",
+    "mcp__jira__getConfluenceSpaces",
+    "mcp__jira__getConfluencePage",
+    "mcp__jira__getPagesInConfluenceSpace",
+    "mcp__jira__getConfluencePageAncestors",
+    "mcp__jira__getConfluencePageFooterComments",
+    "mcp__jira__getConfluencePageInlineComments",
+    "mcp__jira__getConfluencePageDescendants",
+    "mcp__jira__createConfluencePage",
+    "mcp__jira__updateConfluencePage",
+    "mcp__jira__createConfluenceFooterComment",
+    "mcp__jira__createConfluenceInlineComment",
+    "mcp__jira__searchConfluenceUsingCql",
+    "mcp__jira__getJiraIssue",
+    "mcp__jira__editJiraIssue",
+    "mcp__jira__createJiraIssue",
+    "mcp__jira__getTransitionsForJiraIssue",
+    "mcp__jira__transitionJiraIssue",
+    "mcp__jira__lookupJiraAccountId",
+    "mcp__jira__searchJiraIssuesUsingJql",
+    "mcp__jira__addCommentToJiraIssue",
+    "mcp__jira__getJiraIssueRemoteIssueLinks",
+    "mcp__jira__getVisibleJiraProjects",
+    "mcp__jira__getJiraProjectIssueTypesMetadata"
+  ],
+  "mcp_servers": [
+    {
+      "name": "jira",
+      "status": "connected"
+    }
+  ],
+  "model": "claude-sonnet-4-20250514",
+  "permissionMode": "acceptEdits",
+  "slash_commands": [
+    "add-dir",
+    "agents",
+    "clear",
+    "compact",
+    "config",
+    "cost",
+    "doctor",
+    "exit",
+    "help",
+    "ide",
+    "init",
+    "install-github-app",
+    "mcp",
+    "memory",
+    "migrate-installer",
+    "model",
+    "pr-comments",
+    "release-notes",
+    "resume",
+    "status",
+    "statusline",
+    "bug",
+    "review",
+    "security-review",
+    "terminal-setup",
+    "upgrade",
+    "vim",
+    "permissions",
+    "hooks",
+    "export",
+    "logout",
+    "login",
+    "bashes"
+  ],
+  "apiKeySource": "ANTHROPIC_API_KEY"
+}
+```
+
 
 ## Tools being used
 
