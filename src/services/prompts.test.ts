@@ -15,11 +15,6 @@ jest.mock('../../public/js/prompt-utils.js', () => ({
   processPrompt: jest.fn(),
 }));
 
-// Mock the auth utils
-jest.mock('../auth/authUtils.js', () => ({
-  isServerAuthorized: jest.fn(),
-}));
-
 describe('getPrompts', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
