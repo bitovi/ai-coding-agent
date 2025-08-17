@@ -6,7 +6,7 @@
 
 import dotenv from 'dotenv';
 import { ConfigManager } from '../src/config/ConfigManager.js';
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 
 dotenv.config();
 

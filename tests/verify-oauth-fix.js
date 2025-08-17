@@ -4,7 +4,7 @@
  * Demonstrate that the OAuth fix is working by showing successful token retrieval
  */
 
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 
 console.log('🔍 Testing OAuth token exchange fix...');
 console.log('');

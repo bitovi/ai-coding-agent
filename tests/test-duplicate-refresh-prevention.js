@@ -4,7 +4,7 @@
  * Test duplicate refresh prevention in AuthManager
  */
 
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 
 async function testDuplicateRefreshPrevention() {
   console.log('🧪 Testing Duplicate Refresh Prevention\n');
@@ -25,7 +25,7 @@ async function testDuplicateRefreshPrevention() {
     expires_at: Date.now() - 1000, // Force expiration
   };
 
-  authManager.storeTokens('test-service', expiredTokens);
+  authManager._storeTokens('test-service', expiredTokens);
   console.log('✅ Stored expired tokens for test-service');
 
   const mockServer = { 

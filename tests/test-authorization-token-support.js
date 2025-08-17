@@ -5,7 +5,7 @@
  * Tests both config-based authorization_token and environment variable MCP_${serverName}_authorization_token
  */
 
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 
 async function testAuthorizationTokenSupport() {
   console.log('🧪 Testing Authorization Token Support in AuthManager\n');
@@ -78,7 +78,7 @@ async function testAuthorizationTokenSupport() {
   console.log('\n📋 Test 5: Authorization tokens take precedence over OAuth');
   
   // Store OAuth tokens for a server
-  authManager.storeTokens('oauth-test', {
+  authManager._storeTokens('oauth-test', {
     access_token: 'oauth_access_token_123',
     token_type: 'Bearer',
     expires_at: Date.now() + 3600000 // Valid for 1 hour

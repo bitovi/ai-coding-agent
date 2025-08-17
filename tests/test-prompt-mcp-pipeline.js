@@ -7,7 +7,7 @@
 import { ClaudeCodeSDKService } from '../src/providers/claude/ClaudeCodeSDKService.ts';
 import { ConfigManager } from '../src/config/ConfigManager.js';
 import { PromptManager } from '../src/prompts/PromptManager.js';
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 import fs from 'fs-extra';
 
 async function testPromptMcpPipeline() {
@@ -71,7 +71,7 @@ async function testPromptMcpPipeline() {
     const authManager = new AuthManager();
     
     // Mock OAuth token for jira-mcp
-    authManager.storeTokens('jira-mcp', {
+    authManager._storeTokens('jira-mcp', {
       access_token: 'oauth_jira_token_456',
       token_type: 'Bearer',
       expires_at: Date.now() + 3600000

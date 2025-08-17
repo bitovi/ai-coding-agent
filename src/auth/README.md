@@ -41,7 +41,7 @@ export GITHUB_REDIRECT_URI="http://localhost:3000/oauth/github/callback"  # Opti
 
 ### 3. Integration with Existing System
 ```javascript
-import { AuthManager } from './AuthManager.js';
+import { AuthManager } from '../connections/mcp/AuthManager.js';
 import { GitHubAuthIntegration } from './GitHubAuthIntegration.js';
 
 const authManager = new AuthManager();

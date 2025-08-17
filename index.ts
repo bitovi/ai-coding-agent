@@ -12,7 +12,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ConfigManager } from './src/config/ConfigManager.js';
-import { AuthManager } from './src/auth/AuthManager.js';
+import { AuthManager } from './src/connections/mcp/AuthManager.js';
 import { AuthService } from './src/auth/AuthService.js';
 import { isServerAuthorized } from './src/auth/authUtils.js';
 import { PromptManager } from './src/prompts/PromptManager.js';

@@ -4,7 +4,7 @@
  * Test the consolidated authorization token logic with ConfigManager
  */
 
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 import { ConfigManager } from '../src/config/ConfigManager.js';
 
 async function testConsolidatedAuthLogic() {

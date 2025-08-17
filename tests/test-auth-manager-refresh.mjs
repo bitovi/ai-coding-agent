@@ -2,7 +2,7 @@
 
 // Test script for AuthManager refresh token functionality
 
-import { AuthManager } from '../src/auth/AuthManager.js';
+import { AuthManager } from '../src/connections/mcp/AuthManager.js';
 
 async function testRefreshTokenFunctionality() {
   console.log('🧪 Testing AuthManager refresh token functionality...\n');
@@ -11,7 +11,7 @@ async function testRefreshTokenFunctionality() {
   
   // Test 1: Check initial state
   console.log('📋 Test 1: Authorization summary (empty state)');
-  const emptySummary = await authManager.getAuthorizationSummary();
+  const emptySummary = await authManager._getAuthorizationSummary();
   console.log('Summary:', emptySummary);
   console.log('✅ Empty state test passed\n');
   
@@ -29,7 +29,7 @@ async function testRefreshTokenFunctionality() {
     issued_at: Date.now()
   };
   
-  authManager.storeTokens('jira', mockTokens);
+  authManager._storeTokens('jira', mockTokens);
   console.log('✅ Mock tokens stored\n');
   
   // Test 3: Check authorization status
@@ -41,7 +41,7 @@ async function testRefreshTokenFunctionality() {
   
   // Test 4: Check if refresh is needed soon (should be false for fresh tokens)
   console.log('📋 Test 4: Check if refresh needed soon');
-  const needsRefresh = authManager.needsRefreshSoon('jira');
+  const needsRefresh = authManager._needsRefreshSoon('jira');
   console.log('Needs refresh soon:', needsRefresh);
   console.log('✅ Refresh timing check passed\n');
   
@@ -60,7 +60,7 @@ async function testRefreshTokenFunctionality() {
     expires_at: Date.now() - 1000, // Force expiration
   };
   
-  authManager.storeTokens('jira-expired', expiredTokens);
+  authManager._storeTokens('jira-expired', expiredTokens);
   
   // This should return false and log refresh attempt (which will fail due to mock endpoint)
   const mockExpiredServer = { name: 'jira-expired', type: 'url' }; // Minimal server config for test
@@ -70,13 +70,13 @@ async function testRefreshTokenFunctionality() {
   
   // Test 6: Final authorization summary
   console.log('📋 Test 6: Final authorization summary');
-  const finalSummary = await authManager.getAuthorizationSummary();
+  const finalSummary = await authManager._getAuthorizationSummary();
   console.log('Final summary:', JSON.stringify(finalSummary, null, 2));
   console.log('✅ Final summary test passed\n');
   
   // Test 7: Cleanup
   console.log('📋 Test 7: Cleanup expired tokens');
-  authManager.cleanupExpiredTokens();
+  authManager._cleanupExpiredTokens();
   console.log('✅ Cleanup test completed\n');
   
   console.log('🎉 All AuthManager refresh token tests completed!');
