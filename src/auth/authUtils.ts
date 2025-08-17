@@ -4,23 +4,53 @@ import { hasGitCredentials } from '../connections/special/git-credentials.js';
  * Utility functions for authentication checking
  */
 
+export interface GitHubAuthIntegration {
+  isGitHubAuthorized(sessionId: string): boolean;
+}
+
+export interface Server {
+  name: string;
+  type?: string;
+  authorization_token?: string;
+  authorization?: {
+    session_id?: string;
+  };
+  repository?: {
+    url?: string;
+  };
+}
+
+export interface AuthManager {
+  isAuthorized(server: Server): Promise<boolean>;
+}
+
+export interface AuthorizationDetails {
+  serverName: string;
+  isAuthorized: boolean;
+  authMethod: 'environment' | 'config' | 'oauth' | 'custom' | 'none';
+  hasConfigToken: boolean;
+  hasEnvToken: boolean;
+  hasOAuthToken: boolean;
+  hasCustomCredentials: boolean;
+  envTokenKey: string;
+}
+
+type CredentialValidator = (server: Server) => boolean;
+
 // Global GitHub auth integration instance (set by main application)
-let githubAuthIntegration = null;
+let githubAuthIntegration: GitHubAuthIntegration | null = null;
 
 /**
  * Set the GitHub auth integration instance
- * @param {GitHubAuthIntegration} integration - The GitHub auth integration instance
  */
-export function setGitHubAuthIntegration(integration) {
+export function setGitHubAuthIntegration(integration: GitHubAuthIntegration): void {
   githubAuthIntegration = integration;
 }
 
 /**
  * Validate GitHub repository authorization
- * @param {Object} server - Server configuration object
- * @returns {boolean} True if GitHub repo is authorized
  */
-function validateGitHubCredentials(server) {
+function validateGitHubCredentials(server: Server): boolean {
   if (!githubAuthIntegration) {
     return false;
   }
@@ -41,14 +71,9 @@ function validateGitHubCredentials(server) {
  * 1. Pre-configured authorization_token in config (includes env vars if from ConfigManager)
  * 2. OAuth tokens from AuthManager
  * 3. Custom credential validation (server-specific)
- * 
- * @param {string} serverName - Name of the MCP server
- * @param {Object} server - Server configuration object (should be from ConfigManager for env var support)
- * @param {Object} authManager - AuthManager instance
- * @returns {Promise<boolean>} True if the server is authorized
  */
-export async function isServerAuthorized(serverName, server, authManager) {
-  const hasConfigToken = server && server.authorization_token;
+export async function isServerAuthorized(server: Server, authManager: AuthManager): Promise<boolean> {
+  const hasConfigToken = Boolean(server && server.authorization_token);
   const hasOAuthToken = await authManager.isAuthorized(server);
   
   // Check standard auth methods first
@@ -57,25 +82,21 @@ export async function isServerAuthorized(serverName, server, authManager) {
   }
   
   // Check server-specific credential validation
-  const hasCustomCredentials = checkCustomCredentials(serverName, server);
+  const hasCustomCredentials = checkCustomCredentials(server);
   
   return hasCustomCredentials;
 }
 
 /**
  * Check for server-specific credentials using registered validators
- * 
- * @param {string} serverName - Name of the MCP server
- * @param {Object} server - Server configuration object
- * @returns {boolean} True if custom credentials are available
  */
-function checkCustomCredentials(serverName, server) {
-  const validator = credentialValidators[serverName];
+function checkCustomCredentials(server: Server): boolean {
+  const validator = credentialValidators[server.name];
   if (validator && typeof validator === 'function') {
     try {
       return validator(server);
     } catch (error) {
-      console.warn(`Error checking credentials for ${serverName}:`, error);
+      console.warn(`Error checking credentials for ${server.name}:`, error);
       return false;
     }
   }
@@ -86,7 +107,7 @@ function checkCustomCredentials(serverName, server) {
  * Registry of server-specific credential validators
  * Each validator function takes the server config and returns boolean
  */
-const credentialValidators = {
+const credentialValidators: Record<string, CredentialValidator> = {
   'git-mcp-server': hasGitCredentials,
   'github-repo': validateGitHubCredentials,
   'github': validateGitHubCredentials
@@ -94,28 +115,23 @@ const credentialValidators = {
 
 /**
  * Get authorization status details for debugging/logging
- * 
- * @param {string} serverName - Name of the MCP server
- * @param {Object} server - Server configuration object (should be from ConfigManager for env var support)
- * @param {Object} authManager - AuthManager instance
- * @returns {Promise<Object>} Object with detailed authorization status
  */
-export async function getAuthorizationDetails(serverName, server, authManager) {
-  const hasConfigToken = server && server.authorization_token;
+export async function getAuthorizationDetails(server: Server, authManager: AuthManager): Promise<AuthorizationDetails> {
+  const hasConfigToken = Boolean(server && server.authorization_token);
   const hasOAuthToken = await authManager.isAuthorized(server);
-  const hasCustomCredentials = checkCustomCredentials(serverName, server);
+  const hasCustomCredentials = checkCustomCredentials(server);
   
   // Check if the config token came from environment variable
-  const envTokenKey = `MCP_${serverName}_authorization_token`;
-  const hasEnvToken = process.env[envTokenKey];
-  const isEnvToken = hasConfigToken && hasEnvToken && server.authorization_token === hasEnvToken;
+  const envTokenKey = `MCP_${server.name}_authorization_token`;
+  const hasEnvToken = Boolean(process.env[envTokenKey]);
+  const isEnvToken = hasConfigToken && hasEnvToken && server.authorization_token === process.env[envTokenKey];
   
   const authMethod = hasConfigToken ? (isEnvToken ? 'environment' : 'config') : 
                     hasOAuthToken ? 'oauth' : 
                     hasCustomCredentials ? 'custom' : 'none';
   
   return {
-    serverName,
+    serverName: server.name,
     isAuthorized: hasConfigToken || hasOAuthToken || hasCustomCredentials,
     authMethod,
     hasConfigToken,
@@ -125,5 +141,3 @@ export async function getAuthorizationDetails(serverName, server, authManager) {
     envTokenKey
   };
 }
-
-

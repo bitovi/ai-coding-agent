@@ -207,7 +207,7 @@ export function executePrompt(deps: ExecutePromptDeps) {
           const mcpServer = configManager.getMcpServer(mcpServerName);
           
           // Use the same authUtils function as legacy endpoint
-          const isAuthorized = await isServerAuthorized(mcpServerName, mcpServer, authManager);
+          const isAuthorized = await isServerAuthorized(mcpServer, authManager);
           if (!isAuthorized) {
             unauthorizedServers.push(mcpServerName);
           }

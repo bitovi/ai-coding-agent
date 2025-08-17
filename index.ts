@@ -269,7 +269,7 @@ class AICodingAgent {
             const mcpServer = this.configManager.getMcpServer(mcpServerName);
             
             // Use the new authUtils function that includes custom credential validation
-            const isAuthorized = await isServerAuthorized(mcpServerName, mcpServer, this.authManager);
+            const isAuthorized = await isServerAuthorized(mcpServer, this.authManager);
             if (!isAuthorized) {
               unauthorizedServers.push(mcpServerName);
             }

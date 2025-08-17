@@ -200,7 +200,7 @@ export class PromptManager {
       
       const allAuthorized = prompt.mcp_servers.every(serverName => {
         const server = configManager.getMcpServer(serverName);
-        return isServerAuthorized(serverName, server, authManager);
+        return isServerAuthorized(server, authManager);
       });
       
       if (allAuthorized) {
