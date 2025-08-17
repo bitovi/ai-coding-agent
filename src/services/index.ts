@@ -40,8 +40,7 @@ export {
   checkConnectionAvailability,
   getConnectionDescription,
   getConnectionMethod,
-  setupGitCredentials,
-  setupDockerCredentials
+  setupGitCredentials
 } from './common.js';
 
 /**

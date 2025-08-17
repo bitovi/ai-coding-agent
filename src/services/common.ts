@@ -46,8 +46,6 @@ export function checkConnectionAvailability(connectionType: string): boolean {
   switch (connectionType) {
     case 'git-credentials':
       return hasGitCredentials();
-    case 'docker-registry':
-      return !!(process.env.DOCKER_USERNAME && process.env.DOCKER_PASSWORD);
     default:
       return checkConnectionValidator(connectionType);
   }
@@ -57,8 +55,6 @@ export function getConnectionDescription(connectionType: string): string {
   switch (connectionType) {
     case 'git-credentials':
       return 'Git credentials for repository access';
-    case 'docker-registry':
-      return 'Docker registry credentials';
     default:
       return `${connectionType} connection`;
   }
@@ -68,8 +64,6 @@ export function getConnectionMethod(connectionType: string): string {
   switch (connectionType) {
     case 'git-credentials':
       return 'token';
-    case 'docker-registry':
-      return 'credentials';
     default:
       return 'unknown';
   }
@@ -109,16 +103,6 @@ export async function setupGitCredentials(token: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Failed to setup git credentials:', error);
-    return false;
-  }
-}
-
-export async function setupDockerCredentials(credentials: any): Promise<boolean> {
-  try {
-    // Implementation would save docker credentials
-    return typeof credentials === 'object' && credentials.username && credentials.password;
-  } catch (error) {
-    console.error('Failed to setup docker credentials:', error);
     return false;
   }
 }

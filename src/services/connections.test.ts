@@ -7,7 +7,6 @@ jest.mock('./common.js', () => ({
   checkConnectionAvailability: jest.fn(),
   getConnectionDetails: jest.fn(),
   setupGitCredentials: jest.fn(),
-  setupDockerCredentials: jest.fn(),
 }));
 
 describe('getConnections', () => {
@@ -69,17 +68,6 @@ describe('getConnections', () => {
             details: {
               lastConfigured: null,
               method: 'token'
-            }
-          },
-          {
-            name: 'docker-registry',
-            type: 'credential',
-            description: 'Docker registry credentials',
-            isAvailable: false,
-            setupUrl: '/api/connections/credential/docker-registry/setup',
-            details: {
-              lastConfigured: null,
-              method: 'credentials'
             }
           }
         ]
@@ -162,17 +150,6 @@ describe('getConnections', () => {
               lastConfigured: expect.any(String),
               method: 'token'
             }
-          },
-          {
-            name: 'docker-registry',
-            type: 'credential',
-            description: 'Docker registry credentials',
-            isAvailable: false,
-            setupUrl: '/api/connections/credential/docker-registry/setup',
-            details: {
-              lastConfigured: null,
-              method: 'credentials'
-            }
           }
         ]
       },
@@ -228,7 +205,7 @@ describe('getConnections', () => {
     mockDeps.configManager!.getMcpServers = jest.fn().mockReturnValue([]);
     
     commonModule.checkConnectionAvailability.mockImplementation((type: string) => {
-      return type === 'git-credentials' || type === 'docker-registry';
+      return type === 'git-credentials';
     });
     commonModule.getConnectionDetails.mockImplementation(() => ({}));
 
@@ -238,12 +215,9 @@ describe('getConnections', () => {
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
     const gitConnection = response.data.connections.find((c: any) => c.name === 'git-credentials');
-    const dockerConnection = response.data.connections.find((c: any) => c.name === 'docker-registry');
 
     expect(gitConnection.isAvailable).toBe(true);
     expect(gitConnection.details.lastConfigured).toEqual(expect.any(String));
-    expect(dockerConnection.isAvailable).toBe(true);
-    expect(dockerConnection.details.lastConfigured).toEqual(expect.any(String));
   });
 
   it('should handle missing MCP servers gracefully', async () => {
@@ -265,9 +239,8 @@ describe('getConnections', () => {
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
     expect(response.success).toBe(true);
-    expect(response.data.connections).toHaveLength(2); // Only credential connections
+    expect(response.data.connections).toHaveLength(1); // Only credential connections
     expect(response.data.connections[0].name).toBe('git-credentials');
-    expect(response.data.connections[1].name).toBe('docker-registry');
   });
 
   it('should call handleError when an exception occurs', async () => {
@@ -311,7 +284,7 @@ describe('getConnections', () => {
 
     // Assert
     const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-    expect(response.data.connections).toHaveLength(3); // 1 MCP + 2 credential connections
+    expect(response.data.connections).toHaveLength(2); // 1 MCP + 1 credential connection
     
     const connectionTypes = response.data.connections.map((c: any) => c.type);
     expect(connectionTypes).toContain('mcp-server');
@@ -320,7 +293,6 @@ describe('getConnections', () => {
     const connectionNames = response.data.connections.map((c: any) => c.name);
     expect(connectionNames).toContain('slack');
     expect(connectionNames).toContain('git-credentials');
-    expect(connectionNames).toContain('docker-registry');
   });
 
   it('should return true for servers with authorization_token in config', async () => {

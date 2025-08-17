@@ -4,8 +4,7 @@ import {
   handleError, 
   checkConnectionAvailability,
   getConnectionDetails,
-  setupGitCredentials,
-  setupDockerCredentials
+  setupGitCredentials
 } from './common.js';
 
 export interface GetConnectionsDeps {
@@ -52,11 +51,6 @@ export function getConnections(deps: GetConnectionsDeps) {
           name: 'git-credentials',
           description: 'Git credentials for repository access',
           method: 'token'
-        },
-        {
-          name: 'docker-registry',
-          description: 'Docker registry credentials',
-          method: 'credentials'
         }
       ];
 
@@ -224,17 +218,6 @@ export function setupCredentialConnection() {
           }
           success = await setupGitCredentials(token);
           message = success ? 'Git credentials configured successfully' : 'Failed to configure git credentials';
-          break;
-        case 'docker-registry':
-          if (!username || !password) {
-            return res.status(400).json({
-              error: 'Bad Request',
-              message: 'Username and password are required for docker credentials',
-              timestamp: new Date().toISOString()
-            });
-          }
-          success = await setupDockerCredentials({ username, password });
-          message = success ? 'Docker credentials configured successfully' : 'Failed to configure docker credentials';
           break;
         default:
           return res.status(400).json({

@@ -259,16 +259,6 @@ Get all available connections and their status.
         "lastConfigured": "2024-01-15T08:00:00Z",
         "method": "token"
       }
-    },
-    {
-      "name": "docker-registry",
-      "type": "credential",
-      "description": "Docker registry credentials",
-      "isAvailable": false,
-      "setupUrl": "/api/connections/credential/docker-registry/setup",
-      "details": {
-        "lastConfigured": null
-      }
     }
   ]
 }
