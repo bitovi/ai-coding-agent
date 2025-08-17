@@ -7,7 +7,7 @@ import {
   getConnectionMethod
 } from './common.js';
 import { mergeParametersWithDefaults, processPrompt } from '../../public/js/prompt-utils.js';
-import { isServerAuthorized } from '../auth/authUtils.js';
+
 
 export interface GetPromptsDeps {
   promptManager: {
@@ -207,7 +207,7 @@ export function executePrompt(deps: ExecutePromptDeps) {
           const mcpServer = configManager.getMcpServer(mcpServerName);
           
           // Use the same authUtils function as legacy endpoint
-          const isAuthorized = await isServerAuthorized(mcpServer, authManager);
+          const isAuthorized = await authManager.isAuthorized(mcpServer);
           if (!isAuthorized) {
             unauthorizedServers.push(mcpServerName);
           }
