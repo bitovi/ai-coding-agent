@@ -6,7 +6,7 @@
 
 import dotenv from 'dotenv';
 import { ConfigManager } from '../src/config/ConfigManager.js';
-import { PromptManager } from '../src/prompts/PromptManager.js';
+import { PromptProvider } from '../src/providers/PromptProvider.js';
 import { EmailProvider } from '../src/providers/EmailProvider.js';
 
 dotenv.config();
@@ -59,11 +59,11 @@ async function validateConfigurations() {
     await configManager.loadConfigurations();
     console.log(`✅ Loaded ${configManager.getMcpServers().length} MCP servers`);
 
-    // Test PromptManager
-    console.log('📝 Testing PromptManager...');
-    const promptManager = new PromptManager();
-    await promptManager.loadPrompts();
-    console.log(`✅ Loaded ${promptManager.getPrompts().length} prompts`);
+    // Test PromptProvider
+    console.log('📝 Testing PromptProvider...');
+    const promptProvider = new PromptProvider();
+    await promptProvider.loadPrompts();
+    console.log(`✅ Loaded ${promptProvider.getPrompts().length} prompts`);
 
     // Test EmailProvider
     console.log('📧 Testing EmailProvider...');

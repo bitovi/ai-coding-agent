@@ -14,13 +14,11 @@ import { fileURLToPath } from 'url';
 import { ConfigManager } from './src/config/ConfigManager.js';
 import { AuthManager } from './src/connections/mcp/AuthManager.js';
 import { AuthService } from './src/auth/AuthService.js';
-import { isServerAuthorized } from './src/auth/authUtils.js';
-import { PromptManager } from './src/prompts/PromptManager.js';
+import { PromptProvider } from './src/providers/PromptProvider.js';
 import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
 import { EmailProvider } from './src/providers/EmailProvider.js';
 import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
 import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
-import { mergeParametersWithDefaults } from './public/js/prompt-utils.js';
 import { setupAllWebClientRoutes } from './src/services/index.js';
 
 // Load environment variables
@@ -34,7 +32,7 @@ class AICodingAgent {
   private port: number;
   private configManager: ConfigManager;
   private authManager: AuthManager;
-  private promptManager: PromptManager;
+  private promptProvider: PromptProvider;
   private executionHistoryService: ExecutionHistoryProvider;
   private claudeService: any;
   private emailService: EmailProvider;
@@ -48,20 +46,12 @@ class AICodingAgent {
     // Initialize services
     this.configManager = new ConfigManager();
     this.authManager = new AuthManager();
-    this.promptManager = new PromptManager();
+    this.promptProvider = new PromptProvider();
     this.executionHistoryService = new ExecutionHistoryProvider();
     this.claudeService = ClaudeServiceProvider.create(this.executionHistoryService);
     this.emailService = new EmailProvider();
     this.authService = new AuthService(this.emailService);
     this.authMiddleware = new AuthMiddleware(this.authService as any);
-  }
-
-  /**
-   * Merge request parameters with default values from prompt schema
-   * @deprecated Use shared utility from prompt-utils.js instead
-   */
-  mergeParametersWithDefaults(prompt: any, requestParameters: any = {}): any {
-    return mergeParametersWithDefaults(prompt, requestParameters);
   }
 
   async initialize(): Promise<void> {
@@ -82,7 +72,7 @@ class AICodingAgent {
       
       // Load configurations
       await this.configManager.loadConfigurations();
-      await this.promptManager.loadPrompts();
+      await this.promptProvider.loadPrompts();
       
       // Setup middleware
       this.setupMiddleware();
@@ -247,71 +237,6 @@ class AICodingAgent {
       }
     });
 
-    // Prompt execution endpoint
-    this.app.post('/prompt/:promptName/run',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
-      async (req, res) => {
-        try {
-          const promptName = req.params.promptName;
-          const requestParameters = req.body.parameters || {};
-          
-          const prompt = this.promptManager.getPrompt(promptName);
-          if (!prompt) {
-            return res.status(404).json({ error: 'Prompt not found' });
-          }
-
-          // Merge request parameters with defaults from prompt schema
-          const parameters = this.mergeParametersWithDefaults(prompt, requestParameters);
-
-          // Check if all required MCP servers are authorized
-          const unauthorizedServers: string[] = [];
-          for (const mcpServerName of prompt.mcp_servers) {
-            const mcpServer = this.configManager.getMcpServer(mcpServerName);
-            
-            // Use the new authUtils function that includes custom credential validation
-            const isAuthorized = await isServerAuthorized(mcpServer, this.authManager);
-            if (!isAuthorized) {
-              unauthorizedServers.push(mcpServerName);
-            }
-          }
-
-          if (unauthorizedServers.length > 0) {
-            // Save prompt for later execution
-            this.promptManager.savePendingPrompt(promptName, parameters);
-            
-            // Send email notification
-            await this.emailService.sendAuthorizationNeededEmail(
-              process.env.EMAIL || '',
-              unauthorizedServers
-            );
-            
-            return res.status(401).json({
-              error: 'Authorization required',
-              unauthorizedServers,
-              message: 'Please authorize the required MCP servers. An email has been sent with instructions.'
-            });
-          }
-
-          // Execute the prompt
-          const userEmail = (req as any).user?.email || 'unknown';
-          await this.claudeService.executePromptStream(
-            prompt,
-            parameters,
-            this.configManager,
-            this.authManager,
-            res,
-            userEmail
-          );
-          
-        } catch (error: any) {
-          console.error('❌ Prompt execution error:', error);
-          if (!res.headersSent) {
-            res.status(500).json({ error: error.message });
-          }
-        }
-      }
-    );
-
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -324,7 +249,7 @@ class AICodingAgent {
     const webClientDeps = {
       authService: this.authService,
       authMiddleware: this.authMiddleware,
-      promptManager: this.promptManager,
+      promptManager: this.promptProvider,
       configManager: this.configManager,
       authManager: this.authManager,
       executionHistoryService: this.executionHistoryService,

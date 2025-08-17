@@ -4,7 +4,7 @@
  * Test script to verify parameter merging with defaults
  */
 
-import { PromptManager } from '../src/prompts/PromptManager.js';
+import { PromptProvider } from '../src/providers/PromptProvider.js';
 
 // Mock AICodingAgent class with just the mergeParametersWithDefaults method
 class TestAgent {
@@ -36,12 +36,12 @@ async function runTests() {
   // Set environment variable to use example prompts
   process.env.PROMPTS = 'examples/prompts.json';
   
-  const promptManager = new PromptManager();
-  await promptManager.loadPrompts();
+  const promptProvider = new PromptProvider();
+  await promptProvider.loadPrompts();
   const testAgent = new TestAgent();
   
   // Test 1: create-jira-issue prompt with default issueType
-  const jiraprompt = promptManager.getPrompt('create-jira-issue');
+  const jiraprompt = promptProvider.getPrompt('create-jira-issue');
   if (jiraprompt) {
     console.log('Test 1: create-jira-issue prompt with partial parameters');
     const requestParams = {
@@ -58,7 +58,7 @@ async function runTests() {
   }
   
   // Test 2: project-status-report prompt with default timeframe
-  const statusPrompt = promptManager.getPrompt('project-status-report');
+  const statusPrompt = promptProvider.getPrompt('project-status-report');
   if (statusPrompt) {
     console.log('Test 2: project-status-report prompt with partial parameters');
     const requestParams = {
@@ -90,7 +90,7 @@ async function runTests() {
   }
   
   // Test 4: No defaults available
-  const analyzePrompt = promptManager.getPrompt('analyze-repository');
+  const analyzePrompt = promptProvider.getPrompt('analyze-repository');
   if (analyzePrompt) {
     console.log('Test 4: analyze-repository prompt (no defaults)');
     const requestParams = {
