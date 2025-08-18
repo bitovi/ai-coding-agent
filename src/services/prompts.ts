@@ -1,11 +1,11 @@
 import type { Request, Response, Express } from 'express';
 import type { Prompt, Connection, ApiResponse } from '../types/index.js';
 import { 
-  handleError, 
-  checkConnectionAvailability, 
-  getConnectionDescription, 
+  handleError,
+  getConnectionDescription,
   getConnectionMethod
 } from './common.js';
+import { specialConnectionsManager } from '../connections/special/index.js';
 import { mergeParametersWithDefaults, processPrompt } from '../../public/js/prompt-utils.js';
 
 
@@ -60,7 +60,7 @@ export function getPrompts(deps: GetPromptsDeps) {
           Object.entries(prompt.connections).forEach(([env, connectionTypes]) => {
             (connectionTypes as string[]).forEach((connectionType: string) => {
               // Check if connection is available (implement validation logic)
-              const isAvailable = checkConnectionAvailability(connectionType);
+              const isAvailable = specialConnectionsManager.isAvailable(connectionType);
               
               connections.push({
                 name: connectionType,

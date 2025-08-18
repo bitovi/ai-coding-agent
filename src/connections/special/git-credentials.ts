@@ -3,14 +3,14 @@ import path from 'path';
 import os from 'os';
 
 /**
- * Local Git credential validation utilities
- * Handles checking for git credentials on the local system
+ * Git credential management module
+ * Handles checking, validating, and setting up git credentials
  */
 
 /**
  * Detailed credential status interface
  */
-export interface GitCredentialDetails {
+export interface CredentialDetails {
   hasCredentials: boolean;
   hasGitToken: boolean;
   credentialSources: string[];
@@ -19,23 +19,87 @@ export interface GitCredentialDetails {
 }
 
 /**
- * Check if git credentials are available for Claude Code operations
- * @param server - Optional server configuration for server-specific validation
+ * Setup configuration for git credentials
+ */
+export interface SetupConfig {
+  token?: string;
+}
+
+/**
+ * Check if git credentials are available (generic interface)
  * @returns True if git credentials are configured
  */
-export function hasGitCredentials(server?: any): boolean {
-  // For server-specific validation
-  if (server) {
-    const gitHome = getGitHomeDirectory(server);
-    if (!gitHome) {
+export function isAuthorized(): boolean {
+  return hasGitCredentials();
+}
+
+/**
+ * Get detailed credential status (generic interface)
+ * @returns Detailed credential status
+ */
+export function getDetails(): CredentialDetails {
+  return getGitCredentialDetails();
+}
+
+/**
+ * Set up git credentials (generic interface)
+ * @param config - Setup configuration
+ * @returns True if setup was successful
+ */
+export async function setup(config: SetupConfig): Promise<boolean> {
+  if (!config.token) {
+    throw new Error('Token is required for git credentials');
+  }
+  return await setupGitCredentials(config.token);
+}
+
+/**
+ * Set up git credentials with a token
+ * @param token - Git token to configure
+ * @returns True if setup was successful
+ */
+async function setupGitCredentials(token: string): Promise<boolean> {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Validate token format first
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+      console.error('Invalid GitHub token format');
       return false;
     }
     
-    // Check for .git-credentials file or SSH keys
-    return hasGitCredentialsFile(gitHome) || hasValidSshKeys(gitHome);
+    // Determine the appropriate home directory
+    const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
+    
+    // Create .git-credentials file
+    const gitCredentialsPath = path.join(homeDir, '.git-credentials');
+    const username = process.env.GIT_USERNAME || 'token';
+    const credentialsContent = `https://${username}:${token}@github.com\n`;
+    
+    // Write the credentials file with proper permissions
+    await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
+    
+    // Configure git to use the credential store
+    await execAsync('git config --global credential.helper store');
+    
+    console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    console.log(`✅ Git credential helper configured to use store`);
+    return true;
+  } catch (error) {
+    console.error('Failed to setup git credentials:', error);
+    return false;
   }
+}
 
-  // For system-wide validation (Claude Code operations)
+/**
+ * Check if git credentials are available for Claude Code operations
+ * @returns True if git credentials are configured
+ * @internal Used internally by isAuthorized function
+ */
+function hasGitCredentials(): boolean {
+  // For Claude Code SDK git operations - check system-wide
   const possibleHomes = [
     process.env.HOME,
     os.homedir(),
@@ -51,35 +115,6 @@ export function hasGitCredentials(server?: any): boolean {
 
   // Also check if GIT_TOKEN environment variable is available
   return !!process.env.GIT_TOKEN;
-}
-
-/**
- * Get the git home directory from server config or environment
- * @param server - Server configuration object
- * @returns Git home directory path or null
- */
-function getGitHomeDirectory(server: any): string | null {
-  // Priority order for determining git home:
-  // 1. Server env.HOME
-  // 2. GIT_HOME_DIR environment variable
-  // 3. System HOME environment variable
-  
-  const serverHome = server?.env?.HOME;
-  if (serverHome && fs.existsSync(serverHome)) {
-    return serverHome;
-  }
-  
-  const gitHomeDir = process.env.GIT_HOME_DIR;
-  if (gitHomeDir && fs.existsSync(gitHomeDir)) {
-    return gitHomeDir;
-  }
-  
-  const systemHome = process.env.HOME;
-  if (systemHome && fs.existsSync(systemHome)) {
-    return systemHome;
-  }
-  
-  return null;
 }
 
 /**
@@ -127,47 +162,11 @@ function hasValidSshKeys(homeDir: string): boolean {
 
 /**
  * Get detailed git credential status for debugging
- * @param server - Optional server configuration for server-specific validation
  * @returns Detailed credential status
+ * @internal Used internally by getDetails function
  */
-export function getGitCredentialDetails(server?: any): GitCredentialDetails {
-  if (server) {
-    // Server-specific validation
-    const gitHome = getGitHomeDirectory(server);
-    
-    if (!gitHome) {
-      return {
-        hasCredentials: false,
-        hasGitToken: !!process.env.GIT_TOKEN,
-        credentialSources: process.env.GIT_TOKEN ? ['GIT_TOKEN environment variable'] : [],
-        checkedPaths: [],
-        error: 'No valid git home directory found'
-      };
-    }
-    
-    const hasGitCreds = hasGitCredentialsFile(gitHome);
-    const hasSshKeys = hasValidSshKeys(gitHome);
-    const credentialSources: string[] = [];
-    
-    if (hasGitCreds) {
-      credentialSources.push(`git-credentials in ${gitHome}`);
-    }
-    if (hasSshKeys) {
-      credentialSources.push(`SSH keys in ${gitHome}`);
-    }
-    if (process.env.GIT_TOKEN) {
-      credentialSources.push('GIT_TOKEN environment variable');
-    }
-    
-    return {
-      hasCredentials: hasGitCreds || hasSshKeys || !!process.env.GIT_TOKEN,
-      hasGitToken: !!process.env.GIT_TOKEN,
-      credentialSources,
-      checkedPaths: [gitHome]
-    };
-  }
-
-  // System-wide validation (original logic)
+function getGitCredentialDetails(): CredentialDetails {
+  // System-wide validation for Claude Code SDK
   const possibleHomes = [
     process.env.HOME,
     os.homedir(),
@@ -175,7 +174,7 @@ export function getGitCredentialDetails(server?: any): GitCredentialDetails {
     process.env.GIT_HOME_DIR
   ].filter(Boolean);
 
-  const details: GitCredentialDetails = {
+  const details: CredentialDetails = {
     hasCredentials: false,
     hasGitToken: !!process.env.GIT_TOKEN,
     credentialSources: [],

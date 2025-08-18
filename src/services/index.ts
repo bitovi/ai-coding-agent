@@ -37,11 +37,12 @@ export type { Dependencies } from './common.js';
 export { 
   handleError, 
   isBrowserRequest,
-  checkConnectionAvailability,
   getConnectionDescription,
-  getConnectionMethod,
-  setupGitCredentials
+  getConnectionMethod
 } from './common.js';
+
+// Re-export special connections manager
+export { specialConnectionsManager, SpecialConnectionsManager } from '../connections/special/index.js';
 
 /**
  * Wire up all web client service routes to the Express app
