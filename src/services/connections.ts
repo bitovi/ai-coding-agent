@@ -1,12 +1,7 @@
 import type { Request, Response, Express } from 'express';
 import type { Connection, ApiResponse } from '../types/index.js';
-import { 
-  handleError, 
-  checkConnectionAvailability,
-  getConnectionDetails,
-  setupGitCredentials,
-  setupDockerCredentials
-} from './common.js';
+import { handleError } from './common.js';
+import { specialConnectionsManager } from '../connections/special/index.js';
 
 export interface GetConnectionsDeps {
   configManager: {
@@ -47,22 +42,11 @@ export function getConnections(deps: GetConnectionsDeps) {
       }
 
       // Add known credential connections
-      const credentialConnections = [
-        {
-          name: 'git-credentials',
-          description: 'Git credentials for repository access',
-          method: 'token'
-        },
-        {
-          name: 'docker-registry',
-          description: 'Docker registry credentials',
-          method: 'credentials'
-        }
-      ];
+      const credentialConnections = specialConnectionsManager.getAllConnections();
 
       credentialConnections.forEach(cred => {
-        const isAvailable = checkConnectionAvailability(cred.name);
-        const connectionDetails = getConnectionDetails(cred.name);
+        const isAvailable = specialConnectionsManager.isAvailable(cred.name);
+        const connectionDetails = specialConnectionsManager.getConnectionDetails(cred.name);
         
         connections.push({
           name: cred.name,
@@ -207,54 +191,33 @@ export function setupCredentialConnection() {
   return async (req: Request, res: Response) => {
     try {
       const { credentialType } = req.params;
-      const { token, username, password } = req.body;
+      const { token } = req.body;
 
-      // Handle different credential types
-      let success = false;
-      let message = '';
-
-      switch (credentialType) {
-        case 'git-credentials':
-          if (!token) {
-            return res.status(400).json({
-              error: 'Bad Request',
-              message: 'Token is required for git credentials',
-              timestamp: new Date().toISOString()
-            });
-          }
-          success = await setupGitCredentials(token);
-          message = success ? 'Git credentials configured successfully' : 'Failed to configure git credentials';
-          break;
-        case 'docker-registry':
-          if (!username || !password) {
-            return res.status(400).json({
-              error: 'Bad Request',
-              message: 'Username and password are required for docker credentials',
-              timestamp: new Date().toISOString()
-            });
-          }
-          success = await setupDockerCredentials({ username, password });
-          message = success ? 'Docker credentials configured successfully' : 'Failed to configure docker credentials';
-          break;
-        default:
-          return res.status(400).json({
-            error: 'Bad Request',
-            message: `Unknown credential type: ${credentialType}`,
-            timestamp: new Date().toISOString()
-          });
+      // Check if the credential type is supported
+      if (!specialConnectionsManager.hasConnection(credentialType)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Unknown credential type: ${credentialType}`,
+          timestamp: new Date().toISOString()
+        });
       }
+
+      // Set up the credential connection using the manager
+      const success = await specialConnectionsManager.setup(credentialType, {
+        token
+      });
 
       if (!success) {
         return res.status(500).json({
           error: 'Internal Server Error',
-          message,
+          message: `Failed to configure ${credentialType} credentials`,
           timestamp: new Date().toISOString()
         });
       }
 
       const response: ApiResponse = {
         success: true,
-        message,
+        message: `${credentialType} credentials configured successfully`,
         data: {
           connection: {
             name: credentialType,

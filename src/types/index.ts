@@ -36,6 +36,7 @@ export interface User {
   email: string;
   sessionId: string;
   isAuthenticated: boolean;
+  loginMethod?: string;
 }
 
 export interface ApiResponse<T = any> {

@@ -3,13 +3,14 @@ import path from 'path';
 import os from 'os';
 
 /**
- * Connection validators for different types of environment dependencies
+ * Git credential management module
+ * Handles checking, validating, and setting up git credentials
  */
 
 /**
  * Detailed credential status interface
  */
-export interface GitCredentialDetails {
+export interface CredentialDetails {
   hasCredentials: boolean;
   hasGitToken: boolean;
   credentialSources: string[];
@@ -18,20 +19,87 @@ export interface GitCredentialDetails {
 }
 
 /**
- * Connection status interface
+ * Setup configuration for git credentials
  */
-export interface ConnectionStatus {
-  available: boolean;
-  type: string;
-  details?: any;
+export interface SetupConfig {
+  token?: string;
+}
+
+/**
+ * Check if git credentials are available (generic interface)
+ * @returns True if git credentials are configured
+ */
+export function isAuthorized(): boolean {
+  return hasGitCredentials();
+}
+
+/**
+ * Get detailed credential status (generic interface)
+ * @returns Detailed credential status
+ */
+export function getDetails(): CredentialDetails {
+  return getGitCredentialDetails();
+}
+
+/**
+ * Set up git credentials (generic interface)
+ * @param config - Setup configuration
+ * @returns True if setup was successful
+ */
+export async function setup(config: SetupConfig): Promise<boolean> {
+  if (!config.token) {
+    throw new Error('Token is required for git credentials');
+  }
+  return await setupGitCredentials(config.token);
+}
+
+/**
+ * Set up git credentials with a token
+ * @param token - Git token to configure
+ * @returns True if setup was successful
+ */
+async function setupGitCredentials(token: string): Promise<boolean> {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Validate token format first
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+      console.error('Invalid GitHub token format');
+      return false;
+    }
+    
+    // Determine the appropriate home directory
+    const homeDir = process.env.HOME || os.homedir() || '/home/appuser';
+    
+    // Create .git-credentials file
+    const gitCredentialsPath = path.join(homeDir, '.git-credentials');
+    const username = process.env.GIT_USERNAME || 'token';
+    const credentialsContent = `https://${username}:${token}@github.com\n`;
+    
+    // Write the credentials file with proper permissions
+    await fs.promises.writeFile(gitCredentialsPath, credentialsContent, { mode: 0o600 });
+    
+    // Configure git to use the credential store
+    await execAsync('git config --global credential.helper store');
+    
+    console.log(`✅ Git credentials configured at: ${gitCredentialsPath}`);
+    console.log(`✅ Git credential helper configured to use store`);
+    return true;
+  } catch (error) {
+    console.error('Failed to setup git credentials:', error);
+    return false;
+  }
 }
 
 /**
  * Check if git credentials are available for Claude Code operations
  * @returns True if git credentials are configured
+ * @internal Used internally by isAuthorized function
  */
-export function validateGitCredentials(): boolean {
-  // Check multiple possible locations for git credentials
+function hasGitCredentials(): boolean {
+  // For Claude Code SDK git operations - check system-wide
   const possibleHomes = [
     process.env.HOME,
     os.homedir(),
@@ -95,8 +163,10 @@ function hasValidSshKeys(homeDir: string): boolean {
 /**
  * Get detailed git credential status for debugging
  * @returns Detailed credential status
+ * @internal Used internally by getDetails function
  */
-export function getGitCredentialDetails(): GitCredentialDetails {
+function getGitCredentialDetails(): CredentialDetails {
+  // System-wide validation for Claude Code SDK
   const possibleHomes = [
     process.env.HOME,
     os.homedir(),
@@ -104,7 +174,7 @@ export function getGitCredentialDetails(): GitCredentialDetails {
     process.env.GIT_HOME_DIR
   ].filter(Boolean);
 
-  const details: GitCredentialDetails = {
+  const details: CredentialDetails = {
     hasCredentials: false,
     hasGitToken: !!process.env.GIT_TOKEN,
     credentialSources: [],
@@ -131,56 +201,4 @@ export function getGitCredentialDetails(): GitCredentialDetails {
   }
 
   return details;
-}
-
-/**
- * Validate Docker registry credentials
- * @returns True if docker credentials are available
- */
-export function validateDockerCredentials(): boolean {
-  return !!(process.env.DOCKER_USERNAME && process.env.DOCKER_PASSWORD);
-}
-
-/**
- * Registry of connection validators
- * Maps connection names to their validator functions
- */
-export const connectionValidators: Record<string, () => boolean> = {
-  'git-credentials': validateGitCredentials,
-  'docker-registry': validateDockerCredentials
-};
-
-/**
- * Check if a specific connection type is available
- * @param connectionType - Type of connection to validate
- * @returns True if the connection is available
- */
-export function isConnectionAvailable(connectionType: string): boolean {
-  const validator = connectionValidators[connectionType];
-  if (validator && typeof validator === 'function') {
-    try {
-      return validator();
-    } catch (error) {
-      console.warn(`Error checking connection ${connectionType}:`, error);
-      return false;
-    }
-  }
-  return false;
-}
-
-/**
- * Get connection status details for all registered connection types
- * @returns Object mapping connection types to their status
- */
-export function getAllConnectionStatuses(): Record<string, ConnectionStatus> {
-  const statuses: Record<string, ConnectionStatus> = {};
-  
-  for (const [connectionType, validator] of Object.entries(connectionValidators)) {
-    statuses[connectionType] = {
-      available: isConnectionAvailable(connectionType),
-      type: connectionType
-    };
-  }
-  
-  return statuses;
 }

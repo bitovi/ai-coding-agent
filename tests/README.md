@@ -1,53 +1,55 @@
 # Tests
 
-This folder contains test scripts for the AI Coding Agent project.
+This folder contains the remaining test scripts for the AI Coding Agent project.
 
-## Test Files
+## Current Test Structure
 
-### `test-auth-flow.js`
-Tests the authentication flow and session management.
+### Jest Tests (Recommended)
+The main test suite uses Jest and is located in the `src/` directory alongside the source code:
+- `src/services/execution-history.test.ts`
+- `src/services/connections.test.ts` 
+- `src/services/prompts.test.ts`
+- `src/services/user.test.ts`
+
+Run Jest tests with:
+```bash
+npm test           # Run all tests
+npm run test:watch # Run tests in watch mode
+npm run test:coverage # Run with coverage
+```
+
+### Operational Scripts
+Configuration and connection validation scripts are in the `scripts/` directory:
+```bash
+npm run test-connections  # Test MCP server connections
+npm run test-git         # Test git credentials
+npm run validate         # Validate configuration
+```
+
+## Remaining Test Files
+
+### `test-claude-code-basic.js`
+A standalone test for basic Claude Code Service functionality. This should be converted to a proper Jest test in the future.
 
 **Usage:**
 ```bash
-cd /Users/justinmeyer/dev/ai-coding-agent
-node tests/test-auth-flow.js
+node tests/test-claude-code-basic.js
 ```
 
 **What it does:**
-- Tests session-based authentication
-- Validates authentication middleware
-- Tests login/logout functionality
+- Tests ClaudeCodeService creation
+- Validates Claude CLI availability
+- Tests basic MCP configuration
+- Tests prompt execution with git clone
 
-### `test-magic-link.js`
-Tests the magic link email authentication system.
+## Migration Notes
 
-**Usage:**
-```bash
-cd /Users/justinmeyer/dev/ai-coding-agent
-node tests/test-magic-link.js
-```
+This directory previously contained ~35 test files. Most have been:
+- **Removed**: Obsolete tests superseded by Jest tests
+- **Migrated**: Moved to Jest test structure in `src/` directory
+- **Converted**: Operational validation moved to `scripts/` directory
 
-**What it does:**
-- Tests magic link generation
-- Validates email sending (or console logging)
-- Tests magic link authentication flow
-
-### `test-oauth-flow.js`
-Tests the OAuth authorization flow for Atlassian MCP service.
-
-**Usage:**
-```bash
-cd /Users/justinmeyer/dev/ai-coding-agent
-node tests/test-oauth-flow.js
-```
-
-**What it does:**
-- Triggers OAuth authorization for the Jira MCP service
-- Uses ACCESS_TOKEN authentication
-- Generates authorization URL and opens it in browser
-- Tests the OAuth discovery and client registration process
-
-### `test-oauth-callback.js`
+The remaining file should be converted to Jest format and moved to the appropriate `src/` directory location.
 Tests the OAuth callback handling and token exchange with mock data.
 
 **Usage:**

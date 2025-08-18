@@ -50,19 +50,6 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
         });
         
         alert('✅ Git credentials configured successfully!');
-      } else if (connection.name === 'docker-registry') {
-        const username = prompt('Enter your Docker username:');
-        if (!username) return;
-        
-        const password = prompt('Enter your Docker password/token:');
-        if (!password) return;
-        
-        await setupCredentialsMutation.mutateAsync({
-          type: 'docker-registry',
-          credentials: { username, password }
-        });
-        
-        alert('✅ Docker credentials configured successfully!');
       }
     } catch (error) {
       console.error('Credential setup failed:', error);

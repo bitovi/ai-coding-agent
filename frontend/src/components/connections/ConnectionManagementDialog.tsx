@@ -24,8 +24,6 @@ export function ConnectionManagementDialog({
   unauthorizedServers 
 }: ConnectionManagementDialogProps) {
   const [gitToken, setGitToken] = useState('');
-  const [dockerUsername, setDockerUsername] = useState('');
-  const [dockerPassword, setDockerPassword] = useState('');
   
   const authorizeMcpMutation = useAuthorizeMcp();
   const setupCredentialsMutation = useSetupCredentials();
@@ -57,26 +55,6 @@ export function ConnectionManagementDialog({
     } catch (error) {
       console.error('Failed to setup git credentials:', error);
       alert('Failed to setup git credentials');
-    }
-  };
-
-  const handleDockerCredentialsSetup = async () => {
-    if (!dockerUsername.trim() || !dockerPassword.trim()) {
-      alert('Please enter both username and password');
-      return;
-    }
-    
-    try {
-      await setupCredentialsMutation.mutateAsync({
-        type: 'docker-registry',
-        credentials: { username: dockerUsername, password: dockerPassword }
-      });
-      setDockerUsername('');
-      setDockerPassword('');
-      alert('Docker credentials configured successfully!');
-    } catch (error) {
-      console.error('Failed to setup docker credentials:', error);
-      alert('Failed to setup docker credentials');
     }
   };
 
@@ -184,57 +162,6 @@ export function ConnectionManagementDialog({
                   </>
                 ) : (
                   'Setup Git Credentials'
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Docker Credentials Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">🐳 Docker Registry Credentials</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert>
-                <AlertDescription>
-                  Docker credentials are used for container registry operations. Use your Docker Hub or other registry credentials.
-                </AlertDescription>
-              </Alert>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="docker-username">Username</Label>
-                  <Input
-                    id="docker-username"
-                    value={dockerUsername}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDockerUsername(e.target.value)}
-                    placeholder="your-username"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="docker-password">Password/Token</Label>
-                  <Input
-                    id="docker-password"
-                    type="password"
-                    value={dockerPassword}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDockerPassword(e.target.value)}
-                    placeholder="your-password-or-token"
-                  />
-                </div>
-              </div>
-              
-              <Button
-                onClick={handleDockerCredentialsSetup}
-                disabled={setupCredentialsMutation.isPending || !dockerUsername.trim() || !dockerPassword.trim()}
-                className="w-full"
-              >
-                {setupCredentialsMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Setting up...
-                  </>
-                ) : (
-                  'Setup Docker Credentials'
                 )}
               </Button>
             </CardContent>

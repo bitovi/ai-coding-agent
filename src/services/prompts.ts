@@ -1,13 +1,13 @@
 import type { Request, Response, Express } from 'express';
 import type { Prompt, Connection, ApiResponse } from '../types/index.js';
 import { 
-  handleError, 
-  checkConnectionAvailability, 
-  getConnectionDescription, 
+  handleError,
+  getConnectionDescription,
   getConnectionMethod
 } from './common.js';
+import { specialConnectionsManager } from '../connections/special/index.js';
 import { mergeParametersWithDefaults, processPrompt } from '../../public/js/prompt-utils.js';
-import { isServerAuthorized } from '../auth/authUtils.js';
+
 
 export interface GetPromptsDeps {
   promptManager: {
@@ -60,7 +60,7 @@ export function getPrompts(deps: GetPromptsDeps) {
           Object.entries(prompt.connections).forEach(([env, connectionTypes]) => {
             (connectionTypes as string[]).forEach((connectionType: string) => {
               // Check if connection is available (implement validation logic)
-              const isAvailable = checkConnectionAvailability(connectionType);
+              const isAvailable = specialConnectionsManager.isAvailable(connectionType);
               
               connections.push({
                 name: connectionType,
@@ -206,8 +206,8 @@ export function executePrompt(deps: ExecutePromptDeps) {
         for (const mcpServerName of prompt.mcp_servers) {
           const mcpServer = configManager.getMcpServer(mcpServerName);
           
-          // Use the same authUtils function as legacy endpoint
-          const isAuthorized = await isServerAuthorized(mcpServerName, mcpServer, authManager);
+          // Check authorization using AuthManager
+          const isAuthorized = await authManager.isAuthorized(mcpServer);
           if (!isAuthorized) {
             unauthorizedServers.push(mcpServerName);
           }

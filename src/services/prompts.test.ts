@@ -4,20 +4,21 @@ import { getPrompts, type GetPromptsDeps } from './prompts.js';
 // Mock the common module
 jest.mock('./common.js', () => ({
   handleError: jest.fn(),
-  checkConnectionAvailability: jest.fn(),
   getConnectionDescription: jest.fn(),
   getConnectionMethod: jest.fn(),
+}));
+
+// Mock the special connections manager
+jest.mock('../connections/special/index.js', () => ({
+  specialConnectionsManager: {
+    isAvailable: jest.fn(),
+  }
 }));
 
 // Mock the prompt utils
 jest.mock('../../public/js/prompt-utils.js', () => ({
   mergeParametersWithDefaults: jest.fn(),
   processPrompt: jest.fn(),
-}));
-
-// Mock the auth utils
-jest.mock('../auth/authUtils.js', () => ({
-  isServerAuthorized: jest.fn(),
 }));
 
 describe('getPrompts', () => {

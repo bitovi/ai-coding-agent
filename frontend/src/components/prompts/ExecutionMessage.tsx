@@ -1,5 +1,3 @@
-import { Badge } from '@/components/ui/badge';
-
 interface ExecutionMessageProps {
   message: {
     type: string;
