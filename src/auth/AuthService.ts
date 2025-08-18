@@ -1,10 +1,34 @@
-import { SessionManager } from './SessionManager.ts';
+import { SessionManager, Session, SessionStats, MagicLinkStats } from './SessionManager';
+
+interface EmailService {
+  sendMagicLoginEmail(email: string, token: string): Promise<void>;
+}
+
+interface MagicLinkResponse {
+  success: boolean;
+  message: string;
+}
+
+interface VerifyMagicLinkResponse {
+  sessionId: string;
+  email: string;
+}
+
+interface AuthStats {
+  sessions: SessionStats;
+  magicLinks: MagicLinkStats;
+  authorizedEmails: number;
+}
 
 /**
  * Handles user authentication including magic link login
  */
 export class AuthService {
-  constructor(emailService) {
+  private emailService: EmailService;
+  private sessionManager: SessionManager;
+  private authorizedEmails: string[];
+
+  constructor(emailService: EmailService) {
     this.emailService = emailService;
     this.sessionManager = new SessionManager();
     
@@ -15,7 +39,7 @@ export class AuthService {
   /**
    * Parse authorized emails from environment variable
    */
-  parseAuthorizedEmails() {
+  private parseAuthorizedEmails(): string[] {
     const emails = process.env.AUTHORIZED_EMAILS || process.env.EMAIL || '';
     return emails
       .split(',')
@@ -26,7 +50,7 @@ export class AuthService {
   /**
    * Check if an email is authorized to access the system
    */
-  isEmailAuthorized(email) {
+  isEmailAuthorized(email: string): boolean {
     if (this.authorizedEmails.length === 0) {
       // If no authorized emails configured, allow any email (development mode)
       console.warn('⚠️  No AUTHORIZED_EMAILS configured - allowing all email addresses');
@@ -39,7 +63,7 @@ export class AuthService {
   /**
    * Initiate magic link login process
    */
-  async requestMagicLink(email) {
+  async requestMagicLink(email: string): Promise<MagicLinkResponse> {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Validate email format
@@ -76,7 +100,7 @@ export class AuthService {
   /**
    * Verify magic link and create session
    */
-  async verifyMagicLink(token) {
+  async verifyMagicLink(token: string): Promise<VerifyMagicLinkResponse> {
     if (!token) {
       throw new Error('No login token provided');
     }
@@ -103,28 +127,28 @@ export class AuthService {
   /**
    * Validate a session
    */
-  validateSession(sessionId) {
+  validateSession(sessionId: string): boolean {
     return this.sessionManager.validateSession(sessionId);
   }
 
   /**
    * Get session information
    */
-  getSession(sessionId) {
+  getSession(sessionId: string): Session | null {
     return this.sessionManager.getSession(sessionId);
   }
 
   /**
    * Destroy a session (logout)
    */
-  logout(sessionId) {
+  logout(sessionId: string): boolean {
     return this.sessionManager.destroySession(sessionId);
   }
 
   /**
    * Get authentication statistics
    */
-  getStats() {
+  getStats(): AuthStats {
     return {
       sessions: this.sessionManager.getStats(),
       magicLinks: this.sessionManager.getMagicLinkStats(),
@@ -135,8 +159,18 @@ export class AuthService {
   /**
    * Simple email validation
    */
-  isValidEmail(email) {
+  private isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   }
+
+  /**
+   * Clean up resources
+   */
+  destroy(): void {
+    this.sessionManager.destroy();
+  }
 }
+
+// Export interfaces for use by other modules
+export type { EmailService, MagicLinkResponse, VerifyMagicLinkResponse, AuthStats };

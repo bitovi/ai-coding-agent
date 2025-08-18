@@ -13,12 +13,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ConfigManager } from './src/config/ConfigManager.js';
 import { AuthManager } from './src/connections/mcp/AuthManager.js';
-import { AuthService } from './src/auth/AuthService.js';
+import { AuthService } from './src/auth/AuthService';
 import { PromptProvider } from './src/providers/PromptProvider.js';
 import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
 import { EmailProvider } from './src/providers/EmailProvider.js';
 import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
-import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
+import { AuthMiddleware } from './src/middleware/AuthMiddleware';
 import { setupAllWebClientRoutes } from './src/services/index.js';
 
 // Load environment variables

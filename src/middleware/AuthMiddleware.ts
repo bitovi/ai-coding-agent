@@ -1,8 +1,38 @@
+import { AuthService } from '../auth/AuthService';
+import { User } from '../types';
+import { Request, Response, NextFunction } from 'express';
+
+interface AuthResult {
+  success: boolean;
+  reason?: string;
+  user?: User;
+}
+
+interface AuthInstructions {
+  required: boolean;
+  message: string;
+  methods?: string[];
+  details?: {
+    sessionAuth: {
+      available: boolean;
+      description: string;
+    };
+    tokenAuth: {
+      available: boolean;
+      description: string;
+    };
+  };
+}
+
 /**
  * Middleware for handling authentication
  */
 export class AuthMiddleware {
-  constructor(authService = null) {
+  private accessToken: string | undefined;
+  private authService: AuthService | null;
+  private sessionCookieName: string;
+
+  constructor(authService: AuthService | null = null) {
     this.accessToken = process.env.ACCESS_TOKEN;
     this.authService = authService;
     this.sessionCookieName = 'ai-coding-agent-session';
@@ -11,20 +41,21 @@ export class AuthMiddleware {
   /**
    * Set the auth service (used during app initialization)
    */
-  setAuthService(authService) {
+  setAuthService(authService: AuthService): void {
     this.authService = authService;
   }
 
   /**
    * Authenticate incoming requests using sessions or legacy ACCESS_TOKEN
    */
-  authenticate(req, res, next) {
+  authenticate = (req: Request, res: Response, next: NextFunction): void => {
     // Check if authentication is disabled via environment variable
     if (process.env.DISABLE_AUTH === 'true') {
       console.log('🔓 Authentication disabled via DISABLE_AUTH environment variable');
       req.user = { 
         email: 'test@example.com', 
         sessionId: 'test-session',
+        isAuthenticated: true,
         loginMethod: 'disabled' 
       };
       return next();
@@ -65,7 +96,7 @@ export class AuthMiddleware {
   /**
    * Try to authenticate using session cookie
    */
-  trySessionAuthentication(req, res) {
+  private trySessionAuthentication(req: Request, res: Response): AuthResult {
     console.log('🔍 Trying session authentication for:', req.path);
     const sessionId = this.getSessionIdFromRequest(req);
     console.log('🔍 Session ID from request:', sessionId);
@@ -73,6 +104,10 @@ export class AuthMiddleware {
     if (!sessionId) {
       console.log('🔍 No session ID found');
       return { success: false, reason: 'no_session' };
+    }
+
+    if (!this.authService) {
+      return { success: false, reason: 'no_auth_service' };
     }
 
     const session = this.authService.getSession(sessionId);
@@ -90,7 +125,8 @@ export class AuthMiddleware {
       user: { 
         email: session.email, 
         sessionId: session.id,
-        loginMethod: session.loginMethod 
+        isAuthenticated: true,
+        loginMethod: session.loginMethod || 'session'
       } 
     };
   }
@@ -98,9 +134,9 @@ export class AuthMiddleware {
   /**
    * Try legacy token authentication
    */
-  tryTokenAuthentication(req, res) {
+  private tryTokenAuthentication(req: Request, res: Response): AuthResult {
     // Check for token in various places
-    let providedToken = null;
+    let providedToken: string | null = null;
 
     // 1. Authorization header (Bearer token)
     const authHeader = req.headers.authorization;
@@ -110,7 +146,7 @@ export class AuthMiddleware {
 
     // 2. Query parameter
     if (!providedToken && req.query.access_token) {
-      providedToken = req.query.access_token;
+      providedToken = req.query.access_token as string;
     }
 
     // 3. Body parameter (for POST requests)
@@ -120,7 +156,7 @@ export class AuthMiddleware {
 
     // 4. Custom header
     if (!providedToken && req.headers['x-access-token']) {
-      providedToken = req.headers['x-access-token'];
+      providedToken = req.headers['x-access-token'] as string;
     }
 
     // Validate token
@@ -134,7 +170,7 @@ export class AuthMiddleware {
   /**
    * Handle authentication failure by redirecting or returning JSON
    */
-  requireLogin(req, res) {
+  private requireLogin(req: Request, res: Response): void {
     // Check if this is an API request in multiple ways:
     // 1. Path starts with /api/
     // 2. Accept header includes JSON
@@ -147,21 +183,22 @@ export class AuthMiddleware {
                         req.headers.accept?.includes('text/event-stream'); // For streaming endpoints
 
     if (isApiRequest) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Unauthorized',
         message: 'Login required',
         loginUrl: '/login'
       });
+      return;
     }
 
     // For browser requests, redirect to login page
-    return res.redirect('/login');
+    res.redirect('/login');
   }
 
   /**
    * Get session ID from request (cookie or header)
    */
-  getSessionIdFromRequest(req) {
+  getSessionIdFromRequest(req: Request): string | null {
     // Try cookie first
     if (req.headers.cookie) {
       const cookies = this.parseCookies(req.headers.cookie);
@@ -171,13 +208,14 @@ export class AuthMiddleware {
     }
 
     // Try custom header
-    return req.headers['x-session-id'];
+    const sessionHeader = req.headers['x-session-id'];
+    return sessionHeader ? sessionHeader as string : null;
   }
 
   /**
    * Set session cookie
    */
-  setSessionCookie(res, sessionId) {
+  setSessionCookie(res: Response, sessionId: string): void {
     const cookieOptions = [
       `${this.sessionCookieName}=${sessionId}`,
       'HttpOnly',
@@ -193,15 +231,15 @@ export class AuthMiddleware {
   /**
    * Clear session cookie
    */
-  clearSessionCookie(res) {
+  clearSessionCookie(res: Response): void {
     res.setHeader('Set-Cookie', `${this.sessionCookieName}=; HttpOnly; Secure=false; SameSite=Lax; Path=/; Max-Age=0`);
   }
 
   /**
    * Parse cookies from cookie header
    */
-  parseCookies(cookieHeader) {
-    const cookies = {};
+  private parseCookies(cookieHeader: string): Record<string, string> {
+    const cookies: Record<string, string> = {};
     cookieHeader.split(';').forEach(cookie => {
       const [name, value] = cookie.trim().split('=');
       if (name && value) {
@@ -214,7 +252,7 @@ export class AuthMiddleware {
   /**
    * Optional authentication - doesn't block if no token is configured
    */
-  optionalAuthenticate(req, res, next) {
+  optionalAuthenticate = (req: Request, res: Response, next: NextFunction): void => {
     // If session auth is available, try it first
     if (this.authService) {
       const sessionAuth = this.trySessionAuthentication(req, res);
@@ -236,7 +274,7 @@ export class AuthMiddleware {
   /**
    * Get authentication instructions for API consumers
    */
-  getAuthInstructions() {
+  getAuthInstructions(): AuthInstructions {
     const instructions = {
       sessionAuth: {
         available: !!this.authService,
@@ -255,7 +293,7 @@ export class AuthMiddleware {
       };
     }
 
-    const methods = [];
+    const methods: string[] = [];
     if (this.authService) {
       methods.push('Email-based login: Go to /login and enter your email');
     }
@@ -274,3 +312,6 @@ export class AuthMiddleware {
     };
   }
 }
+
+// Export types for use by other modules
+export type { User, AuthResult, AuthInstructions };
