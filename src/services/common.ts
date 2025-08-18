@@ -3,9 +3,6 @@ import type { ApiResponse } from '../types/index.js';
 import { 
   type CredentialDetails 
 } from '../connections/special/git-credentials.js';
-import { 
-  isConnectionAvailable as checkConnectionValidator
-} from '../connections/special/index.js';
 
 // Dependencies interface for dependency injection
 export interface Dependencies {

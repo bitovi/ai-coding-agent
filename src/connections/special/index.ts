@@ -187,53 +187,5 @@ export class SpecialConnectionsManager {
 // Export singleton instance for use across the application
 export const specialConnectionsManager = new SpecialConnectionsManager();
 
-// ==================== BACKWARD COMPATIBILITY ====================
-
-/**
- * Check if git credentials are available for Claude Code operations
- * @returns True if git credentials are configured
- * @deprecated Use specialConnectionsManager.isAvailable('git-credentials') instead
- */
-export function validateGitCredentials(): boolean {
-  return specialConnectionsManager.isAvailable('git-credentials');
-}
-
-/**
- * Get detailed git credential status for debugging
- * @returns Detailed credential status
- * @deprecated Use specialConnectionsManager.getConnectionDetails('git-credentials') instead
- */
-export function getGitCredentialDetails(): any {
-  return specialConnectionsManager.getConnectionDetails('git-credentials');
-}
-
-/**
- * Registry of connection validators
- * Maps connection names to their validator functions
- * @deprecated Use SpecialConnectionsManager instead
- */
-export const connectionValidators: Record<string, () => boolean> = {
-  'git-credentials': validateGitCredentials
-};
-
-/**
- * Check if a specific connection type is available
- * @param connectionType - Type of connection to validate
- * @returns True if the connection is available
- * @deprecated Use specialConnectionsManager.isAvailable instead
- */
-export function isConnectionAvailable(connectionType: string): boolean {
-  return specialConnectionsManager.isAvailable(connectionType);
-}
-
-/**
- * Get connection status details for all registered connection types
- * @returns Object mapping connection types to their status
- * @deprecated Use specialConnectionsManager.getAllConnectionStatuses instead
- */
-export function getAllConnectionStatuses(): Record<string, ConnectionStatus> {
-  return specialConnectionsManager.getAllConnectionStatuses();
-}
-
 // Re-export types for convenience
 export type { CredentialDetails } from './git-credentials.js';
