@@ -14,8 +14,10 @@ export interface Connection {
   type: 'mcp-server' | 'credential';
   description: string;
   isAvailable: boolean;
+  isProxy?: boolean;
   authUrl?: string;
   setupUrl?: string;
+  proxyEndpoints?: string[];
   details?: Record<string, any>;
 }
 

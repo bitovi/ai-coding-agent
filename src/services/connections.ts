@@ -30,9 +30,12 @@ export function getConnections(deps: GetConnectionsDeps) {
           type: 'mcp-server',
           description: server.description || `${server.name} integration`,
           isAvailable,
+          isProxy: !!server.proxy,
           authUrl: `/api/connections/mcp/${server.name}/authorize`,
+          proxyEndpoints: server.proxy ? [`/api/mcp/${server.name}/proxy`] : undefined,
           details: {
             url: server.url,
+            targetUrl: server.proxy ? server.url : undefined,
             scopes: server.scopes,
             lastAuthorized: isAvailable ? new Date().toISOString() : null,
             tokenExpiry: null,

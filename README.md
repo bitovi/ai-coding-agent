@@ -13,6 +13,7 @@ This is an AI coding agent that runs Claude with MCP (Model Context Protocol) se
 - 🔄 **Streaming Responses**: Real-time streaming of Claude responses via Server-Sent Events
 - 📊 **Activity Tracking**: View execution history and results
 - 🛡️ **Secure Sessions**: HTTP-only cookies with automatic session management
+- 🔄 **MCP Proxy**: Secure HTTP proxy for MCP servers with SSE endpoint rewriting and domain validation
 
 ## Quick Start
 
@@ -87,10 +88,12 @@ The application requires the following environment variables:
             "allowed_tools": null, // or array of allowed tool names
             "allowed_paths": ["/path/to/allowed/directory"] // for stdio type only
         },
-        "oauth_provider_configuration": null // or OAuthProviderConfiguration object
+        "oauth_provider_configuration": null // or OAuthProviderConfiguration object (experimental - not yet fully tested)
     }
   ]
   ```
+
+  **Note**: Currently, `oauth_provider_configuration` is experimental. All working examples use `null` for automatic OAuth discovery.
 
   **Transport Types:**
   - `"url"`: Network-based MCP servers (HTTP, SSE, WebSocket, etc.) 
@@ -204,6 +207,68 @@ PROMPTS=./examples/prompts.json
 
 See [examples/prompts.json](./examples/prompts.json) for complete examples with parameter substitution.
 
+## MCP Proxy
+
+The AI Coding Agent includes a built-in HTTP proxy for MCP servers. This allows tools like GitHub Copilot to connect to MCP servers through your instance, handling authentication and providing secure access to services that only support dynamic PKCE authorization like Jira.
+
+### Setup Steps
+
+#### 1. Configure MCP Server with Proxy
+
+Add `"proxy": true` to your MCP server configuration:
+
+```json
+{
+  "name": "jira",
+  "type": "url",
+  "url": "https://mcp.atlassian.com/v1/sse",
+  "proxy": true,
+  "authorization_token": null,
+  "tool_configuration": {
+    "enabled": true
+  }
+}
+```
+
+#### 2. Authorize the Service
+
+If your MCP server requires OAuth (like Jira), you'll need to authorize it:
+
+1. Start your AI Coding Agent server
+2. Open the dashboard at `http://localhost:3000`
+3. Click the "Authorize" button next to your MCP service
+4. Complete the OAuth flow
+
+#### 3. Configure Your MCP Client
+
+Configure your MCP client (like Copilot) to connect through the proxy. For local development, you'll likely need to use a tool like ngrok to expose your server.
+
+**Example mcp.json for Copilot:**
+```json
+{
+  "servers": {
+    "my-proxy": {
+      "url": "https://your-server.com/api/mcp/jira/proxy",
+      "headers": {
+        "Authorization": "Bearer your_access_token",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}
+```
+
+**⚠️ Security Warning**: Never commit your `ACCESS_TOKEN` to version control. Keep it secure and use environment variables in production.
+
+**Local Development**: Use ngrok or similar tools to expose your local server:
+```bash
+# Example with ngrok
+ngrok http 3000
+# Then use the ngrok URL: https://abc123.ngrok-free.app/api/mcp/jira/proxy
+```
+
+The proxy provides secure forwarding, automatic authentication, and SSE streaming support. For detailed technical information, see the [MCP Proxy Specification](./specifications/mcp-proxy-fallback-behavior.md).
+
 ## Usage Guide
 
 ### 1. Setting Up Your Environment
@@ -280,6 +345,39 @@ Executes a prompt with streaming SSE response.
 #### `GET /prompts/{PROMPT_NAME}/activity.html`
 View execution history for a specific prompt.
 
+#### MCP Proxy Endpoints
+
+The following endpoints are available when MCP servers have `"proxy": true` configured:
+
+#### `POST/GET /api/mcp/{MCP_NAME}/proxy`
+Main proxy endpoint for forwarding requests to MCP servers.
+
+**Query Parameters:**
+- `target` (optional): Specific target URL to proxy to (must be on same domain as configured MCP server)
+
+**Features:**
+- Automatic authentication using configured tokens
+- SSE streaming support
+- Domain-validated URL forwarding
+- Session management
+
+#### `GET /api/mcp/{MCP_NAME}/proxy/status`
+Get proxy status and configuration information.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "name": "jira",
+    "isProxy": true,
+    "targetUrl": "https://mcp.atlassian.com/v1/sse",
+    "isAuthorized": true,
+    "hasToken": true
+  }
+}
+```
+
 ## Development
 
 ### Project Structure
@@ -332,14 +430,14 @@ The following resources provide essential background information:
 
 The application supports two OAuth configuration methods:
 
-### 1. Explicit OAuth Configuration
+### 1. Explicit OAuth Configuration (Experimental)
 
-When `oauth_provider_configuration` is provided in MCP server config:
+The system supports explicit OAuth configuration, but this feature is **experimental and not yet fully tested**:
 
 ```json
 {
   "name": "github",
-  "type": "sse",
+  "type": "sse", 
   "url": "https://api.github.com/mcp/sse",
   "oauth_provider_configuration": {
     "provider": "GitHub",
@@ -353,15 +451,17 @@ When `oauth_provider_configuration` is provided in MCP server config:
 }
 ```
 
-### 2. Endpoint Discovery
+**Note**: Currently, all working examples use `"oauth_provider_configuration": null` and rely on automatic discovery.
 
-When no `oauth_provider_configuration` is provided, the system automatically discovers OAuth endpoints using:
+### 2. Automatic Endpoint Discovery (Current Method)
+
+When `oauth_provider_configuration` is `null` (the current standard), the system automatically discovers OAuth endpoints using:
 
 1. WWW-Authenticate header resource parameter (RFC9728)
-2. Standard OAuth Authorization Server Metadata endpoint
+2. Standard OAuth Authorization Server Metadata endpoint  
 3. OpenID Connect Discovery endpoint
 
-This follows the same discovery logic as the reference implementation.
+This automatic discovery is the **current working method** used by all examples. Most MCP servers should support this discovery mechanism.
 
 ## Error Handling & Notifications
 

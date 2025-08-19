@@ -4,6 +4,7 @@
     "type": "url",
     "url": "https://mcp.atlassian.com/v1/sse",
     "authorization_token": null,
+    "proxy": true,
     "tool_configuration": {
       "enabled": true
     },

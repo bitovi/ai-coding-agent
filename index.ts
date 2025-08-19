@@ -4,7 +4,16 @@
  * AI Coding Agent
  * 
  * This is an AI coding agent that runs Claude Code while providing it 
- * access tokens for MCP services.
+ * access token      // Check if this is a public route
+      const isPublicRoute = publicRoutes.some(route => {
+        if (route.endsWith('/') && route !== '/') {
+          // For routes ending with / (except root), check if path starts with the route
+          return req.path.startsWith(route);
+        } else {
+          // For exact routes (including root /), match exactly
+          return req.path === route;
+        }
+      });services.
  */
 
 import express, { Application, Request, Response, NextFunction } from 'express';
@@ -13,12 +22,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ConfigManager } from './src/config/ConfigManager.js';
 import { AuthManager } from './src/connections/mcp/AuthManager.js';
-import { AuthService } from './src/auth/AuthService';
+import { AuthService } from './src/auth/AuthService.js';
 import { PromptProvider } from './src/providers/PromptProvider.js';
 import { ClaudeServiceProvider } from './src/providers/claude/ClaudeServiceProvider.js';
 import { EmailProvider } from './src/providers/EmailProvider.js';
 import { ExecutionHistoryProvider } from './src/providers/ExecutionHistoryProvider.js';
-import { AuthMiddleware } from './src/middleware/AuthMiddleware';
+import { AuthMiddleware } from './src/middleware/AuthMiddleware.js';
 import { setupAllWebClientRoutes } from './src/services/index.js';
 
 // Load environment variables
@@ -112,7 +121,48 @@ class AICodingAgent {
   }
 
   setupRoutes(): void {
-    // Authentication routes
+    // === GLOBAL AUTHENTICATION MIDDLEWARE ===
+    // Apply authentication to all routes by default, with specific exceptions for public routes
+    this.app.use((req, res, next) => {
+      // Define public routes that don't require authentication
+      const publicRoutes = [
+        '/health',                    // Health check
+        '/auth/request-login',        // Request magic link
+        '/auth/login',               // Verify magic link
+        '/login',                    // React login page
+        '/static/',                  // Static assets (CSS, JS, etc.)
+        '/assets/',                  // Vite build assets
+        '/vite.svg',                 // Favicon
+        '/favicon.svg',              // Favicon
+        '/favicon.ico',              // Standard favicon
+        '/api/mcp/',                 // MCP proxy endpoints (no auth required - MCP servers handle their own auth)
+        '/v1/sse/'                   // Legacy SSE endpoints for MCP fallback
+      ];
+
+      // Special case: root path should be public but not treated as prefix
+      const isRootPath = req.path === '/';
+      
+      // Check if this is a public route
+      const isPublicRoute = isRootPath || publicRoutes.some(route => {
+        if (route.endsWith('/') && route !== '/') {
+          // For routes ending with / (except root), check if path starts with the route
+          return req.path.startsWith(route);
+        } else {
+          // For exact routes (including root /), match exactly
+          return req.path === route;
+        }
+      });
+
+      // Skip authentication for public routes
+      if (isPublicRoute) {
+        return next();
+      }
+
+      // Apply authentication for all other routes
+      this.authMiddleware.authenticate(req, res, next);
+    });
+
+    // === AUTHENTICATION ROUTES ===
     // Note: /login route is now handled by React Router in the SPA
     this.app.post('/auth/request-login', async (req, res) => {
       try {
@@ -138,18 +188,25 @@ class AICodingAgent {
 
     this.app.get('/auth/login', async (req, res) => {
       try {
+        console.log('🔐 /auth/login route hit with token:', req.query.token);
         const { token } = req.query;
         
         if (!token) {
+          console.log('❌ No token provided');
           return res.redirect('/login?error=invalid_token');
         }
 
+        console.log('🔍 Verifying magic link...');
         const loginResult = await this.authService.verifyMagicLink(token as string);
+        console.log('✅ Magic link verified, session ID:', loginResult.sessionId);
         
         // Set session cookie
+        console.log('🍪 Setting session cookie...');
         this.authMiddleware.setSessionCookie(res, loginResult.sessionId);
+        console.log('✅ Session cookie set');
         
         // Redirect to dashboard with success message
+        console.log('↩️ Redirecting to dashboard');
         res.redirect('/?success=login');
       } catch (error: any) {
         console.error('❌ Magic link verification error:', error);
@@ -188,7 +245,6 @@ class AICodingAgent {
 
     // MCP authorization endpoint
     this.app.post('/mcp/:mcpName/authorize',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
       async (req, res) => {
         try {
           const mcpName = req.params.mcpName;
@@ -209,7 +265,6 @@ class AICodingAgent {
 
     // Environment connections setup endpoint
     this.app.post('/connections/git-credentials/setup',
-      this.authMiddleware.authenticate.bind(this.authMiddleware),
       async (req, res) => {
         try {
           const { token } = req.body;

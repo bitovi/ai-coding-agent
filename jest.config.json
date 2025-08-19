@@ -12,6 +12,9 @@
       "useESM": true
     }]
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(node-fetch)/)"
+  ],
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"
   },

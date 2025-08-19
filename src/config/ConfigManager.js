@@ -80,6 +80,16 @@ export class ConfigManager {
     if (server.oauth_provider_configuration) {
       this.validateOAuthConfig(server.oauth_provider_configuration);
     }
+
+    // Validate proxy configuration
+    if (server.proxy === true) {
+      if (server.type !== 'url') {
+        throw new Error(`Proxy is only supported for 'url' type MCP servers, got '${server.type}'`);
+      }
+      if (!server.url) {
+        throw new Error(`Proxy-enabled MCP server '${server.name}' must have a valid URL`);
+      }
+    }
   }
 
   validateOAuthConfig(config) {
