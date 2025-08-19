@@ -31,15 +31,22 @@ export function proxyMcpRequest(deps: ProxyServiceDeps) {
   
   return async (req: Request, res: ExpressResponse) => {
     try {
-      console.log(`🔄 MCP Proxy: ${req.method} ${req.path}`);
-      console.log(`🔄 Headers:`, req.headers);
-      
       const { mcpName } = req.params;
+      const targetUrl = req.query.target as string;
       
-      // For GET requests (SSE), create a basic proxy request
-      let proxyRequest: ProxyRequest;
-      if (req.method === 'GET') {
-        // SSE connections typically start with an initialize or connect request
+      // Handle requests differently based on whether we have a target parameter
+      let proxyRequest: ProxyRequest | null = null;
+      
+      if (targetUrl) {
+        // If target URL is provided (from rewritten SSE endpoint), 
+        // we still need to read the request body for POST requests
+        if (req.method === 'POST' && req.body) {
+          proxyRequest = req.body;
+        } else {
+          proxyRequest = null;
+        }
+      } else if (req.method === 'GET') {
+        // For GET requests without target (initial MCP connection), create initialization
         proxyRequest = {
           method: 'initialize',
           params: {
@@ -53,6 +60,7 @@ export function proxyMcpRequest(deps: ProxyServiceDeps) {
           id: Date.now()
         };
       } else {
+        // For POST requests, use request body
         proxyRequest = req.body;
       }
       
@@ -75,6 +83,19 @@ export function proxyMcpRequest(deps: ProxyServiceDeps) {
         });
       }
       
+      // 3. Determine the actual target URL
+      const actualTargetUrl = targetUrl || server.url;
+      
+      // 4. Validate target URL if provided
+      if (targetUrl && !validateTargetUrl(targetUrl, mcpName, configManager)) {
+        return res.status(400).json({
+          error: 'Invalid target URL',
+          message: `Target URL must be on the same domain as configured MCP server: ${new URL(server.url).hostname}`,
+          provided: targetUrl,
+          allowed: new URL(server.url).hostname
+        });
+      }
+      
       // 3. Get authorization token from AuthManager
       let authToken = server.authorization_token;
       if (!authToken) {
@@ -83,7 +104,7 @@ export function proxyMcpRequest(deps: ProxyServiceDeps) {
       }
       
       // 4. Forward request with proper headers
-      const response = await forwardMcpRequest(server.url, proxyRequest, authToken, res);
+      const response = await forwardMcpRequest(actualTargetUrl, proxyRequest, authToken, res, mcpName);
       
       // 5. Return response (only for non-streaming responses)
       if (response) {
@@ -137,12 +158,64 @@ export function getProxyStatus(deps: ProxyServiceDeps) {
   };
 }
 
+// Helper function to validate target URLs for security
+function validateTargetUrl(targetUrl: string, mcpName: string, configManager: any): boolean {
+  const server = configManager.getMcpServer(mcpName);
+  if (!server) return false;
+  
+  try {
+    const target = new URL(targetUrl);
+    const serverBase = new URL(server.url);
+    
+    // 1. Must be same domain as configured MCP server
+    if (target.hostname !== serverBase.hostname) {
+      return false;
+    }
+    
+    // 2. Must use same protocol as configured server
+    if (target.protocol !== serverBase.protocol) {
+      return false;
+    }
+    
+    // 3. Optional: Validate port if specified in server config
+    if (serverBase.port && target.port !== serverBase.port) {
+      return false;
+    }
+    
+    // 4. Additional security: reject suspicious patterns
+    if (target.hostname.includes('..') || target.pathname.includes('..')) {
+      return false;
+    }
+    
+    return true;
+  } catch {
+    return false; // Invalid URL
+  }
+}
+
+// Helper function to rewrite SSE endpoint URLs to use our proxy
+function rewriteSSEEndpoints(sseData: string, mcpName: string, serverBaseUrl: string): string {
+  // Pattern: event: endpoint\ndata: /some/path?params
+  const endpointPattern = /(event:\s*endpoint\s*\ndata:\s*)([^\n\r]+)/g;
+  
+  return sseData.replace(endpointPattern, (match, prefix, originalPath) => {
+    // Construct the full target URL that the proxy should forward to
+    const targetUrl = new URL(originalPath, serverBaseUrl).toString();
+    
+    // Rewrite to use our proxy endpoint with target URL parameter
+    const newPath = `/api/mcp/${mcpName}/proxy?target=${encodeURIComponent(targetUrl)}`;
+    
+    return `${prefix}${newPath}`;
+  });
+}
+
 // Helper function to forward requests to MCP servers
 async function forwardMcpRequest(
   serverUrl: string, 
-  request: ProxyRequest, 
+  request: ProxyRequest | null, 
   authToken?: string,
-  res?: ExpressResponse // For streaming responses
+  res?: ExpressResponse, // For streaming responses
+  mcpName?: string // For SSE rewriting
 ): Promise<ProxyResponse | void> {
   const headers: Record<string, string> = {
     'User-Agent': 'AI-Coding-Agent-Proxy/1.0'
@@ -152,40 +225,93 @@ async function forwardMcpRequest(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
   
-  // For GET requests (SSE), or if the target URL is an SSE endpoint, establish an event stream
-  const isSSERequest = res && (res.req.method === 'GET' || serverUrl.includes('/sse'));
+  // For GET requests (SSE), establish an event stream
+  // Note: Don't force SSE just because URL contains '/sse' - respect the HTTP method
+  const isSSERequest = res && res.req.method === 'GET';
   
   if (isSSERequest) {
-    // For SSE connections, make a GET request with appropriate headers
-    headers['Accept'] = 'text/event-stream';
-    headers['Cache-Control'] = 'no-cache';
+    return await forwardSSERequest(serverUrl, headers, res, mcpName);
+  } else {
+    return await forwardHttpRequest(serverUrl, request, headers, res, mcpName);
+  }
+}
+
+// Helper function to handle SSE (Server-Sent Events) requests
+async function forwardSSERequest(
+  serverUrl: string,
+  headers: Record<string, string>,
+  res: ExpressResponse,
+  mcpName?: string
+): Promise<void> {
+  // For SSE connections, make a GET request with appropriate headers
+  headers['Accept'] = 'text/event-stream';
+  headers['Cache-Control'] = 'no-cache';
+  
+  const fetchStartTime = Date.now();
+  let response;
+  
+  try {
+    // Create an AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 120000); // 120 second timeout
     
-    const response = await fetch(serverUrl, {
+    response = await fetch(serverUrl, {
       method: 'GET',
-      headers
+      headers,
+      signal: controller.signal
     });
     
-    if (!response.ok) {
-      const errorResponse = {
-        error: response.statusText || 'Error',
-        message: `MCP server responded with ${response.status}: ${response.statusText}`,
-        details: {
-          targetStatus: response.status,
-          targetStatusText: response.statusText,
-          targetUrl: serverUrl
-        },
-        timestamp: new Date().toISOString()
-      };
-      
-      res.status(response.status).json(errorResponse);
-      return;
-    }
+    clearTimeout(timeoutId);
     
-    // Handle SSE response
-    await forwardStreamingResponse(response, res);
+  } catch (error) {
+    const fetchTime = Date.now() - fetchStartTime;
+    
+    res.status(500).json({
+      error: 'Fetch Error',
+      message: `Failed to connect to MCP server: ${error.message}`,
+      details: {
+        errorName: error.name,
+        serverUrl,
+        fetchTime
+      },
+      timestamp: new Date().toISOString()
+    });
     return;
-  } else {
-    // For POST requests, send JSON-RPC
+  }
+  
+  if (!response.ok) {
+    const errorResponse = {
+      error: response.statusText || 'Error',
+      message: `MCP server responded with ${response.status}: ${response.statusText}`,
+      details: {
+        targetStatus: response.status,
+        targetStatusText: response.statusText,
+        targetUrl: serverUrl
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    res.status(response.status).json(errorResponse);
+    return;
+  }
+  
+  // Handle SSE response
+  await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
+}
+
+// Helper function to handle regular HTTP requests (POST/JSON-RPC)
+async function forwardHttpRequest(
+  serverUrl: string,
+  request: ProxyRequest | null,
+  headers: Record<string, string>,
+  res?: ExpressResponse,
+  mcpName?: string
+): Promise<ProxyResponse | void> {
+  // For POST requests, send JSON-RPC (if request is provided)
+  // For direct proxy requests, just forward as-is
+  if (request) {
     headers['Content-Type'] = 'application/json';
     
     const response = await fetch(serverUrl, {
@@ -205,7 +331,7 @@ async function forwardMcpRequest(
     // Only treat as streaming if response is OK and has streaming headers
     if (res && response.ok && (contentType?.includes('text/event-stream') || transferEncoding?.includes('chunked'))) {
       // Handle streaming response by forwarding stream
-      await forwardStreamingResponse(response, res);
+      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
       return; // No return value for streaming
     }
     
@@ -233,11 +359,64 @@ async function forwardMcpRequest(
     
     // Handle regular JSON response
     return await response.json() as ProxyResponse;
+  } else {
+    // Direct proxy request (null request) - forward the raw HTTP request
+    // This handles direct GET requests to SSE endpoints with target parameter
+    const method = res?.req.method || 'GET';
+    
+    // Set appropriate headers for different request types
+    if (method === 'GET') {
+      headers['Accept'] = 'text/event-stream, */*';
+      headers['Cache-Control'] = 'no-cache';
+    }
+    
+    const response = await fetch(serverUrl, {
+      method: method,
+      headers
+    });
+    
+    if (!response.ok) {
+      const errorResponse = {
+        error: response.statusText || 'Error',
+        message: `MCP server responded with ${response.status}: ${response.statusText}`,
+        details: {
+          targetStatus: response.status,
+          targetStatusText: response.statusText,
+          targetUrl: serverUrl
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      if (res) {
+        res.status(response.status).json(errorResponse);
+        return;
+      } else {
+        throw new Error(`MCP server responded with ${response.status}: ${response.statusText}`);
+      }
+    }
+    
+    // Check if this is a streaming response
+    const contentType = response.headers.get('content-type');
+    const transferEncoding = response.headers.get('transfer-encoding');
+    
+    if (res && (contentType?.includes('text/event-stream') || transferEncoding?.includes('chunked'))) {
+      // Handle streaming response
+      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
+      return;
+    } else {
+      // Handle regular response
+      return await response.json() as ProxyResponse;
+    }
   }
 }
 
 // Helper function to forward streaming responses (SSE and HTTP streaming)
-async function forwardStreamingResponse(sourceResponse: Response, targetResponse: ExpressResponse): Promise<void> {
+async function forwardStreamingResponse(
+  sourceResponse: Response, 
+  targetResponse: ExpressResponse, 
+  mcpName?: string, 
+  serverBaseUrl?: string
+): Promise<void> {
   const contentType = sourceResponse.headers.get('content-type');
   const isSSE = contentType?.includes('text/event-stream');
   
@@ -280,6 +459,15 @@ async function forwardStreamingResponse(sourceResponse: Response, targetResponse
     // Use the ReadableStream reader API
     const reader = sourceStream.getReader();
     
+    // Handle client disconnect
+    targetResponse.on('close', () => {
+      reader.cancel('Client disconnected');
+    });
+    
+    targetResponse.on('error', (error) => {
+      reader.cancel('Target response error');
+    });
+    
     while (true) {
       const { done, value } = await reader.read();
       
@@ -287,8 +475,16 @@ async function forwardStreamingResponse(sourceResponse: Response, targetResponse
         break;
       }
       
-      // Forward the chunk to the client
-      targetResponse.write(value);
+      // For SSE responses with rewriting capability, process the chunk
+      if (isSSE && mcpName && serverBaseUrl) {
+        // Convert chunk to string, rewrite SSE endpoints, then convert back
+        let chunk = new TextDecoder().decode(value);
+        chunk = rewriteSSEEndpoints(chunk, mcpName, serverBaseUrl);
+        targetResponse.write(new TextEncoder().encode(chunk));
+      } else {
+        // Forward the chunk as-is
+        targetResponse.write(value);
+      }
     }
     
     targetResponse.end();
@@ -298,9 +494,9 @@ async function forwardStreamingResponse(sourceResponse: Response, targetResponse
     
     // Send error in appropriate format
     if (isSSE) {
-      targetResponse.write(`event: error\ndata: ${JSON.stringify({ error: 'Stream forwarding failed' })}\n\n`);
+      targetResponse.write(`event: error\ndata: ${JSON.stringify({ error: 'Stream forwarding failed', details: error.message })}\n\n`);
     } else {
-      targetResponse.write(JSON.stringify({ error: 'Stream forwarding failed' }));
+      targetResponse.write(JSON.stringify({ error: 'Stream forwarding failed', details: error.message }));
     }
     targetResponse.end();
   }
@@ -320,79 +516,4 @@ export function setupMcpProxyRoutes(app: Express, deps: ProxyServiceDeps) {
   
   // GET /api/mcp/:mcpName/proxy/status - Get proxy status
   app.get('/api/mcp/:mcpName/proxy/status', getProxyStatus(deps));
-  
-  // Legacy SSE endpoint that Copilot falls back to
-  app.post('/v1/sse/message', async (req, res) => {
-    try {
-      console.log(`🔄 Legacy SSE: ${req.method} ${req.path}`);
-      console.log(`🔄 Query params:`, req.query);
-      console.log(`🔄 Body:`, req.body);
-      
-      // For legacy SSE fallback, we need to determine which MCP server to proxy to
-      // For now, default to 'jira' - in production this could be configurable
-      const mcpName = 'jira';
-      const server = deps.configManager.getMcpServer(mcpName);
-      
-      if (!server) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: `MCP server '${mcpName}' not found`,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      // Get authorization token
-      let authToken = server.authorization_token;
-      if (!authToken) {
-        const tokens = deps.authManager.getTokens(mcpName);
-        authToken = tokens?.access_token;
-      }
-      
-      // Construct the full Jira SSE endpoint with session ID
-      const baseUrl = 'https://mcp.atlassian.com';
-      const sessionId = req.query.sessionId;
-      const targetUrl = sessionId 
-        ? `${baseUrl}/v1/sse/message?sessionId=${sessionId}`
-        : `${baseUrl}/v1/sse/message`;
-      
-      console.log(`🔄 Forwarding to: ${targetUrl}`);
-      
-      // Forward to the actual Jira SSE endpoint
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'AI-Coding-Agent-Proxy/1.0'
-      };
-      
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(req.body)
-      });
-      
-      if (!response.ok) {
-        return res.status(response.status).json({
-          error: response.statusText || 'Error',
-          message: `MCP server responded with ${response.status}: ${response.statusText}`,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      // Check if response is streaming
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('text/event-stream')) {
-        await forwardStreamingResponse(response, res);
-      } else {
-        const result = await response.json();
-        res.json(result);
-      }
-      
-    } catch (error) {
-      console.error('Legacy SSE error:', error);
-      handleError(res, error);
-    }
-  });
 }

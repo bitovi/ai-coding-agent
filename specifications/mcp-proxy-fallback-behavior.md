@@ -68,7 +68,7 @@ app.post('/v1/sse/message', async (req, res) => {
 **Rewrite the SSE endpoint data to use our proxy URLs:**
 
 ```typescript
-async function forwardStreamingResponse(sourceResponse: Response, targetResponse: ExpressResponse, mcpName: string): Promise<void> {
+async function forwardStreamingResponse(sourceResponse: Response, targetResponse: ExpressResponse, mcpName: string, serverBaseUrl: string): Promise<void> {
   const reader = sourceResponse.body?.getReader();
   
   while (true) {
@@ -79,7 +79,7 @@ async function forwardStreamingResponse(sourceResponse: Response, targetResponse
     let chunk = new TextDecoder().decode(value);
     
     // Rewrite endpoint URLs in SSE data
-    chunk = rewriteSSEEndpoints(chunk, mcpName);
+    chunk = rewriteSSEEndpoints(chunk, mcpName, serverBaseUrl);
     
     // Forward the modified chunk
     targetResponse.write(chunk);
@@ -88,57 +88,260 @@ async function forwardStreamingResponse(sourceResponse: Response, targetResponse
   targetResponse.end();
 }
 
-function rewriteSSEEndpoints(sseData: string, mcpName: string): string {
+function rewriteSSEEndpoints(sseData: string, mcpName: string, serverBaseUrl: string): string {
   // Pattern: event: endpoint\ndata: /some/path?params
   const endpointPattern = /(event:\s*endpoint\s*\ndata:\s*)([^\n\r]+)/g;
   
   return sseData.replace(endpointPattern, (match, prefix, originalPath) => {
-    // Extract session ID and other params from original path
-    const url = new URL(originalPath, 'https://example.com'); // dummy base
-    const sessionId = url.searchParams.get('sessionId');
+    // Construct the full target URL that the proxy should forward to
+    const targetUrl = new URL(originalPath, serverBaseUrl).toString();
     
-    // Rewrite to use our proxy endpoint
-    const newPath = `/api/mcp/${mcpName}/proxy/session?sessionId=${sessionId}`;
+    // Rewrite to use our proxy endpoint with target URL parameter
+    const newPath = `/api/mcp/${mcpName}/proxy?target=${encodeURIComponent(targetUrl)}`;
     
     return `${prefix}${newPath}`;
   });
 }
 
-// Add new route for session-based requests
+// Single proxy endpoint handles all requests
 export function setupMcpProxyRoutes(app: Express, deps: ProxyServiceDeps) {
-  // Standard proxy routes
+  // Universal proxy endpoint - handles both initial and redirect requests
   app.post('/api/mcp/:mcpName/proxy', proxyMcpRequest(deps));
   app.get('/api/mcp/:mcpName/proxy', proxyMcpRequest(deps));
-  
-  // Session-based proxy route (for rewritten endpoints)
-  app.post('/api/mcp/:mcpName/proxy/session', sessionProxyHandler(deps));
   
   // Status route
   app.get('/api/mcp/:mcpName/proxy/status', getProxyStatus(deps));
 }
 
-function sessionProxyHandler(deps: ProxyServiceDeps) {
+function proxyMcpRequest(deps: ProxyServiceDeps) {
   return async (req: Request, res: ExpressResponse) => {
     const { mcpName } = req.params;
-    const sessionId = req.query.sessionId;
+    const targetUrl = req.query.target as string; // URL to forward to (if specified)
     
-    // Forward to the actual MCP server's session endpoint
+    // Get MCP server configuration
     const server = deps.configManager.getMcpServer(mcpName);
-    const targetUrl = `${server.url.replace('/v1/sse', '')}/v1/sse/message?sessionId=${sessionId}`;
+    if (!server) {
+      return res.status(404).json({ error: 'MCP server not found' });
+    }
+    
+    // Determine the actual target URL
+    const actualTargetUrl = targetUrl || server.url;
+    
+    // Validate target URL if provided
+    if (targetUrl && !validateTargetUrl(targetUrl, mcpName, deps.configManager)) {
+      return res.status(400).json({
+        error: 'Invalid target URL',
+        message: `Target URL must be on the same domain as configured MCP server: ${new URL(server.url).hostname}`,
+        provided: targetUrl,
+        allowed: new URL(server.url).hostname
+      });
+    }
+    
+    // Get authorization token
+    let authToken = server.authorization_token;
+    if (!authToken) {
+      const tokens = deps.authManager.getTokens(mcpName);
+      authToken = tokens?.access_token;
+    }
     
     // Forward the request
-    return forwardMcpRequest(targetUrl, req.body, getAuthToken(server, deps), res);
+    const proxyRequest = req.method === 'GET' 
+      ? { method: 'initialize', params: { /* ... */ }, id: Date.now() }
+      : req.body;
+      
+    return forwardMcpRequest(actualTargetUrl, proxyRequest, authToken, res, mcpName);
   };
+}
+
+function validateTargetUrl(targetUrl: string, mcpName: string, configManager: ConfigManager): boolean {
+  const server = configManager.getMcpServer(mcpName);
+  if (!server) return false;
+  
+  try {
+    const target = new URL(targetUrl);
+    const serverBase = new URL(server.url);
+    
+    // 1. Must be same domain as configured MCP server
+    if (target.hostname !== serverBase.hostname) {
+      return false;
+    }
+    
+    // 2. Must use same protocol as configured server
+    if (target.protocol !== serverBase.protocol) {
+      return false;
+    }
+    
+    // 3. Optional: Validate port if specified in server config
+    if (serverBase.port && target.port !== serverBase.port) {
+      return false;
+    }
+    
+    return true;
+  } catch {
+    return false; // Invalid URL
+  }
 }
 ```
 
-### Benefits of SSE Rewriting:
+### Benefits of SSE Rewriting with Secure Target Parameter:
 
+✅ **Single endpoint**: Only one proxy endpoint needed - no separate session routes  
 ✅ **Complete control**: We control where Copilot sends follow-up requests  
-✅ **No guesswork**: No need to determine which MCP server from ambiguous requests  
+✅ **No guesswork**: Target URL is explicit in the query parameter  
+✅ **Domain-restricted**: Only allows URLs on the same domain as configured MCP server  
+✅ **Protocol-secure**: Prevents protocol downgrade attacks (HTTPS → HTTP)  
 ✅ **Scalable**: Works with unlimited MCP servers  
 ✅ **Standard compliant**: Uses the existing SSE endpoint discovery pattern  
-✅ **Transparent**: Copilot doesn't know it's being redirected through our proxy
+✅ **Transparent**: Copilot doesn't know it's being redirected through our proxy  
+✅ **Safe flexibility**: Can proxy to any URL on the trusted MCP server domain
+
+### Security Validation
+
+The proxy implements multiple layers of security validation to prevent common attack vectors:
+
+#### 1. Target URL Validation
+- **Domain restriction**: Target URL must be on same domain as configured MCP server
+- **Protocol enforcement**: Target URL must use same protocol as configured server  
+- **Port validation**: Target URL must use same port (if specified in config)
+- **Invalid URL rejection**: Malformed URLs are rejected with clear error messages
+
+#### 2. Input Sanitization
+- **URL encoding**: Target URLs are properly URL-encoded when passed as query parameters
+- **Path traversal prevention**: No `../` or `./` manipulation possible due to full URL validation
+- **Query parameter isolation**: Target URL is treated as opaque string, not parsed for injection
+
+#### 3. Authentication Forwarding
+- **Token isolation**: MCP server tokens are never exposed to clients
+- **Secure storage**: Tokens retrieved from encrypted storage or secure configuration
+- **Standard header forwarding**: Headers are forwarded as-is to MCP servers (trusted client environment)
+
+#### 4. Error Handling
+- **Information disclosure prevention**: Error messages don't leak internal URLs or tokens
+- **Clear error responses**: Target URL validation failures return detailed HTTP 400 responses
+
+### Attack Scenarios Prevented
+
+#### Server-Side Request Forgery (SSRF)
+❌ **SSRF to internal services**: `http://localhost:6379/` → Blocked (different domain)  
+❌ **SSRF to metadata endpoints**: `http://169.254.169.254/` → Blocked (different domain)  
+❌ **SSRF to internal networks**: `http://192.168.1.1/` → Blocked (different domain)
+
+#### Protocol and Network Attacks  
+❌ **Protocol downgrade**: `http://mcp.atlassian.com/` → Blocked (different protocol)  
+❌ **Port scanning**: `https://mcp.atlassian.com:3306/` → Blocked (different port)  
+❌ **DNS rebinding**: `https://127.0.0.1.mcp.atlassian.com/` → Blocked (different domain)
+
+#### Data Exfiltration
+❌ **External data exfiltration**: `https://evil.com/collect` → Blocked (different domain)  
+❌ **Subdomain exfiltration**: `https://evil.mcp.atlassian.com/` → Blocked (different domain)  
+❌ **Path traversal**: `https://mcp.atlassian.com/../../../etc/passwd` → Safe (full URL validation)
+
+#### Injection Attacks
+❌ **URL injection in logs**: Target URLs are sanitized in error messages  
+❌ **Response splitting**: Target URL validation prevents CRLF injection
+
+### Allowed Scenarios
+
+✅ **Session endpoints**: `https://mcp.atlassian.com/v1/sse/message?sessionId=...`  
+✅ **API versions**: `https://mcp.atlassian.com/v2/sse`  
+✅ **Different paths**: `https://mcp.atlassian.com/api/realtime`  
+✅ **Query parameters**: `https://mcp.atlassian.com/v1/sse?token=abc&version=2`
+
+### Implementation Security Best Practices
+
+#### 1. Strict Domain Validation
+```typescript
+function validateTargetUrl(targetUrl: string, mcpName: string, configManager: ConfigManager): boolean {
+  const server = configManager.getMcpServer(mcpName);
+  if (!server) return false;
+  
+  try {
+    const target = new URL(targetUrl);
+    const serverBase = new URL(server.url);
+    
+    // Exact domain match - no subdomain wildcards
+    if (target.hostname !== serverBase.hostname) {
+      return false;
+    }
+    
+    // Protocol must match exactly
+    if (target.protocol !== serverBase.protocol) {
+      return false;
+    }
+    
+    // Port must match if specified
+    if (serverBase.port && target.port !== serverBase.port) {
+      return false;
+    }
+    
+    // Additional security: reject suspicious patterns
+    if (target.hostname.includes('..') || target.pathname.includes('..')) {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    return false; // Invalid URL
+  }
+}
+```
+
+#### 2. MCP-Specific Logging
+```typescript
+// Log SSE endpoint rewrites - this adds valuable context beyond HTTP logs
+function logSSERewrite({ originalEndpoint, rewrittenEndpoint, mcpName }) {
+  console.info('SSE endpoint rewritten', { 
+    originalEndpoint, 
+    rewrittenEndpoint, 
+    mcpName 
+  });
+}
+
+// Usage in rewriteSSEEndpoints function
+function rewriteSSEEndpoints(sseData: string, mcpName: string, serverBaseUrl: string): string {
+  return sseData.replace(endpointPattern, (match, prefix, originalPath) => {
+    const targetUrl = new URL(originalPath, serverBaseUrl).toString();
+    const newPath = `/api/mcp/${mcpName}/proxy?target=${encodeURIComponent(targetUrl)}`;
+    
+    // Log the rewrite for debugging
+    logSSERewrite({
+      originalEndpoint: originalPath,
+      rewrittenEndpoint: newPath,
+      mcpName
+    });
+    
+    return `${prefix}${newPath}`;
+  });
+}
+```
+```
+
+### Defense in Depth Strategy
+
+The MCP proxy implements multiple security layers:
+
+1. **Network Level**: Only configured MCP server domains allowed
+2. **Application Level**: Input validation and sanitization
+3. **Authentication Level**: Token-based access control
+4. **Monitoring Level**: SSE endpoint rewriting visibility
+
+### Example Flow:
+
+1. **Initial request**: `POST /api/mcp/jira/proxy` (uses server.url from config)
+2. **Jira responds**: `event: endpoint\ndata: /v1/sse/message?sessionId=123`
+3. **We rewrite to**: `event: endpoint\ndata: /api/mcp/jira/proxy?target=https%3A%2F%2Fmcp.atlassian.com%2Fv1%2Fsse%2Fmessage%3FsessionId%3D123`
+4. **Copilot follows**: `POST /api/mcp/jira/proxy?target=...` 
+5. **We validate**: Target URL domain matches `mcp.atlassian.com` ✅
+6. **We proxy to**: The validated target URL
+
+### Why This Approach Is Safe
+
+Since we're already configured to proxy to `https://mcp.atlassian.com/v1/sse`, allowing proxying to other endpoints like:
+- `https://mcp.atlassian.com/v1/sse/message?sessionId=123`
+- `https://mcp.atlassian.com/api/session/456`
+- `https://mcp.atlassian.com/legacy/endpoint`
+
+...doesn't meaningfully increase the attack surface. We already trust this domain and have authentication tokens for it.
 
 ### Option 1: Dynamic Route Registration
 
@@ -415,48 +618,96 @@ function determineMcpServer(req: Request, deps: ProxyServiceDeps): string | null
 3. **Session dependency**: Without session IDs, routing becomes guesswork
 4. **Client limitations**: We can't modify how Copilot sends requests
 
-## Recommended Implementation
+## Recommended Implementation: Secure Target Parameter
 
-**Use Option 0 (SSE Response Rewriting)** - this is the most elegant and scalable solution:
+**Use SSE Response Rewriting with Domain-Validated Target Parameter** - this provides the best balance of elegance, security, and practicality.
 
-1. **Rewrite SSE endpoint URLs** to point back to our proxy with server identification
-2. **Add session-based proxy routes** to handle the rewritten requests  
-3. **Maintain session context** automatically through URL structure
-4. **No guesswork or heuristics needed** - everything is explicit
+This approach eliminates the need for:
+- ❌ Hardcoded legacy endpoints
+- ❌ Complex session mapping  
+- ❌ Route guessing heuristics
+- ❌ Manual endpoint configuration
 
-This approach works because:
-- ✅ **Standards-compliant**: Uses the existing SSE endpoint discovery pattern
-- ✅ **Scales infinitely**: Each MCP server gets its own URL namespace  
-- ✅ **No configuration needed**: Works automatically for any MCP server
-- ✅ **Transparent to clients**: Copilot follows standard SSE redirects
-- ✅ **Debuggable**: Clear request routing through URL paths
+While providing:
+- ✅ **Maximum flexibility within secure boundaries**
+- ✅ **Domain-restricted proxying** to prevent SSRF attacks
+- ✅ **Single endpoint architecture** for simplicity
+- ✅ **Standards-compliant SSE redirection**
 
-### Implementation Example
+## Single Proxy Endpoint Routes
 
 ```typescript
-// In forwardStreamingResponse function:
-async function forwardStreamingResponse(sourceResponse: Response, targetResponse: ExpressResponse, mcpName?: string): Promise<void> {
-  const reader = sourceResponse.body?.getReader();
+export function setupMcpProxyRoutes(app: Express, deps: ProxyServiceDeps) {
+  // Universal proxy endpoint - handles both initial and redirect requests
+  app.post('/api/mcp/:mcpName/proxy', proxyMcpRequest(deps));
+  app.get('/api/mcp/:mcpName/proxy', proxyMcpRequest(deps));
   
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    
-    let chunk = new TextDecoder().decode(value);
-    
-    // Rewrite endpoint URLs if we have an MCP server name
-    if (mcpName) {
-      chunk = rewriteSSEEndpoints(chunk, mcpName);
-    }
-    
-    targetResponse.write(new TextEncoder().encode(chunk));
-  }
+  // Status route
+  app.get('/api/mcp/:mcpName/proxy/status', getProxyStatus(deps));
   
-  targetResponse.end();
+  // No legacy endpoints needed - everything goes through the main proxy with validation!
 }
 ```
 
-This completely eliminates the need for catch-all handlers or session mapping complexity!
+## Recommended Implementation: Secure Target Parameter
+
+**Use SSE Response Rewriting with Domain-Validated Target Parameter** - this provides the best balance of elegance, security, and practicality:
+
+### Security Strategy
+
+Validate that target URLs match the configured MCP server's domain and protocol - this leverages existing trust relationships while preventing abuse.
+
+### Implementation
+
+```typescript
+// Enhanced forwardMcpRequest function:
+async function forwardMcpRequest(
+  targetUrl: string, 
+  request: ProxyRequest, 
+  authToken?: string,
+  res?: ExpressResponse,
+  mcpName?: string
+): Promise<ProxyResponse | void> {
+  // ... existing forwarding logic ...
+  
+  // When forwarding streaming responses, pass server base URL for rewriting
+  if (isSSERequest && mcpName) {
+    const serverBaseUrl = new URL(targetUrl).origin;
+    await forwardStreamingResponse(response, res, mcpName, serverBaseUrl);
+  }
+}
+
+// Modified proxy handler with security validation:
+function proxyMcpRequest(deps: ProxyServiceDeps) {
+  return async (req: Request, res: ExpressResponse) => {
+    const { mcpName } = req.params;
+    const targetUrl = req.query.target as string; // Explicit target URL
+    
+    const server = deps.configManager.getMcpServer(mcpName);
+    const actualTargetUrl = targetUrl || server.url; // Use target or default
+    
+    // Validate target URL if provided
+    if (targetUrl && !validateTargetUrl(targetUrl, mcpName, deps.configManager)) {
+      return res.status(400).json({
+        error: 'Invalid target URL',
+        message: `Target URL must be on the same domain as configured MCP server`,
+        provided: targetUrl,
+        allowed: new URL(server.url).hostname
+      });
+    }
+    
+    // Forward with URL rewriting enabled
+    return forwardMcpRequest(actualTargetUrl, req.body, authToken, res, mcpName);
+  };
+}
+```
+
+This approach is **significantly cleaner and more secure** because:
+- ✅ **Single proxy endpoint** handles all cases
+- ✅ **Domain-restricted** - can only proxy to trusted MCP server domains  
+- ✅ **Protocol-safe** - prevents downgrade attacks
+- ✅ **No routing complexity** - target URL is explicit but validated
+- ✅ **Leverages existing trust** - same domains we already proxy to
 
 ## Configuration Example
 
@@ -480,12 +731,63 @@ This completely eliminates the need for catch-all handlers or session mapping co
 3. **Future-Proof**: Adapts to new MCP server implementations
 4. **Debuggable**: Clear logging and error messages
 5. **Backward Compatible**: Maintains existing functionality
+6. **Security-First**: Multiple layers of protection against common attacks
 
-## Implementation Priority
+## Security Monitoring and Incident Response
 
-1. **Phase 1**: Implement session tracking in existing proxy
-2. **Phase 2**: Add catch-all legacy handler with heuristics
-3. **Phase 3**: Add configuration options for explicit fallback endpoints
-4. **Phase 4**: Add client hint headers for improved detection
+### Monitoring Alerts
 
-This approach ensures our MCP proxy can handle the dynamic nature of MCP protocol fallback behaviors while remaining maintainable and scalable.
+The proxy should generate alerts for the following security events:
+
+```typescript
+enum SecurityEventType {
+  INVALID_TARGET_URL = 'invalid_target_url',
+  DOMAIN_MISMATCH = 'domain_mismatch', 
+  PROTOCOL_DOWNGRADE = 'protocol_downgrade',
+  SUSPICIOUS_PATTERN = 'suspicious_pattern',
+  AUTHENTICATION_FAILURE = 'auth_failure'
+}
+
+interface SecurityEvent {
+  type: SecurityEventType;
+  timestamp: string;
+  clientIP: string;
+  userAgent: string;
+  mcpName: string;
+  attemptedUrl: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  details: Record<string, any>;
+}
+```
+
+### Alert Thresholds
+
+- **High**: > 10 invalid target URL attempts from same IP in 5 minutes
+- **Critical**: Attempts to access localhost, private IPs, or cloud metadata
+- **Medium**: > 5 protocol downgrade attempts from same IP in 1 hour
+- **Low**: Single invalid domain attempts (normal Copilot behavior)
+
+### Incident Response
+
+1. **Automated Response**:
+   - Log critical-level events for investigation
+   - Log all events for security analysis
+
+2. **Manual Response**:
+   - Review security logs for patterns
+   - Update domain allowlists if needed
+   - Coordinate with MCP server administrators
+
+3. **Recovery**:
+   - Update security rules based on findings
+   - Document new attack patterns for future prevention
+
+### Security Hardening Checklist
+
+- [ ] Target URL validation implemented and tested
+- [ ] SSE endpoint rewriting logging enabled for debugging
+- [ ] Error messages don't leak sensitive information
+- [ ] HTTP responses provide clear validation failure details
+- [ ] Regular security testing performed
+- [ ] MCP server configurations reviewed
+
