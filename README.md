@@ -209,7 +209,7 @@ See [examples/prompts.json](./examples/prompts.json) for complete examples with 
 
 ## MCP Proxy
 
-The AI Coding Agent includes a built-in HTTP proxy for MCP servers. This allows tools like GitHub Copilot to connect to MCP servers through your instance, handling authentication and providing secure access to services like Jira.
+The AI Coding Agent includes a built-in HTTP proxy for MCP servers. This allows tools like GitHub Copilot to connect to MCP servers through your instance, handling authentication and providing secure access to services that only support dynamic PKCE authorization like Jira.
 
 ### Setup Steps
 
