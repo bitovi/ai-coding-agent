@@ -49,6 +49,11 @@ export class AuthMiddleware {
    * Authenticate incoming requests using sessions or legacy ACCESS_TOKEN
    */
   authenticate = (req: Request, res: Response, next: NextFunction): void => {
+    console.log(`🔐 AuthMiddleware.authenticate called for: ${req.method} ${req.path}`);
+    console.log(`🔐 DISABLE_AUTH env var: '${process.env.DISABLE_AUTH}'`);
+    console.log(`🔐 ACCESS_TOKEN configured: ${!!this.accessToken}`);
+    console.log(`🔐 Auth service configured: ${!!this.authService}`);
+    
     // Check if authentication is disabled via environment variable
     if (process.env.DISABLE_AUTH === 'true') {
       console.log('🔓 Authentication disabled via DISABLE_AUTH environment variable');
@@ -88,9 +93,9 @@ export class AuthMiddleware {
       return this.requireLogin(req, res);
     }
 
-    // No authentication configured at all
-    console.warn('⚠️  No authentication configured - allowing request');
-    return next();
+    // No authentication configured at all - this is a security issue
+    console.error('❌ No authentication configured and no valid credentials provided');
+    return this.requireLogin(req, res);
   }
 
   /**

@@ -4,6 +4,7 @@ import { setupPromptRoutes } from './prompts.js';
 import { setupConnectionRoutes } from './connections.js';
 import { setupSystemRoutes } from './system.js';
 import { setupExecutionHistoryRoutes } from './execution-history.js';
+import { setupMcpProxyRoutes } from './mcp-proxy.js';
 
 // Re-export all functions from the modular services
 export { getUserInfo, setupUserRoutes } from './user.js';
@@ -31,6 +32,11 @@ export {
   getPromptActivity,
   setupExecutionHistoryRoutes 
 } from './execution-history.js';
+export { 
+  proxyMcpRequest, 
+  getProxyStatus,
+  setupMcpProxyRoutes 
+} from './mcp-proxy.js';
 
 // Re-export common types and utilities for convenience
 export type { Dependencies } from './common.js';
@@ -55,4 +61,5 @@ export function setupAllWebClientRoutes(app: any, deps: any = {}) {
   setupConnectionRoutes(app, deps); 
   setupSystemRoutes(app, deps);
   setupExecutionHistoryRoutes(app, deps);
+  setupMcpProxyRoutes(app, deps);
 }
