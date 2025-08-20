@@ -3,8 +3,16 @@ name: Build and Publish
 # TODO: Add description
 
 on:
-  workflow_dispatch:
   workflow_call:
+    inputs:
+        image_tag:
+          description: Image tag for container
+          required: true
+          type: string
+
+env:
+  # ECR_URL: 767397775295.dkr.ecr.us-east-2.amazonaws.com/ai/ai-coding-agent # Bitovi AI Registry
+  ECR_URL: 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent # Bitovi Playground Registry
 
 jobs:  
   build-and-publish:
@@ -22,14 +30,12 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }} -f Dockerfile .
+          docker build -t $ECR_URL:${{ inputs.image_tag }} -f Dockerfile .
 
       - name: Push Docker image
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 755521597925.dkr.ecr.us-east-1.amazonaws.com
-          docker tag 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }} 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:latest
-          docker push 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }}
-          docker push 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:latest
+          docker push $ECR_URL:${{ inputs.image_tag }}
 
   slackNotificationSuccess:
     name: Slack Notification (Success)
