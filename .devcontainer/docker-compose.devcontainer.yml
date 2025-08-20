@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # No ports needed; VS Code will forward 3000 for you
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    env_file:
+      - ./ngrok.env
+    command: >
+      http app:3000
+      --log=stdout
+      --log-format=json
+      --inspect=true
+    depends_on:
+      - app
+    network_mode: "service:app"
