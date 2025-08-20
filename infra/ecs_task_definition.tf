@@ -1,6 +1,6 @@
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name = "/ecs/ai-coding-agent"
-  retention_in_days = 7
+  name = "/ecs"
+  retention_in_days = var.log_retention_period
 }
 
 resource "aws_ecs_task_definition" "ai_coding_agent_td" {
@@ -13,10 +13,10 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
   
   container_definitions = jsonencode([
     {
-      name      = "ai-coding-agent"
-      image     = "755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:latest"
-      cpu       = 1024
-      memory    = 2048
+      name      = var.app_name
+      image     = "${var.image_url}:${var.image_tag}"
+      cpu       = var.cpu_request
+      memory    = var.mem_request
       essential = true
       portMappings = [
         {
@@ -28,10 +28,16 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = "us-east-1"
-          "awslogs-stream-prefix" = "ai-coding-agent"
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = var.app_name
         }
-      }
+      },
+      "environmentFiles": [
+        {
+          "value": var.env_file_arn,
+          "type": "s3"
+        }
+      ],
     },
   ])
 }

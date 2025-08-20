@@ -1,0 +1,71 @@
+variable "aws_region" {
+    description = "AWS region for deployment"
+    type        = string
+    default     = "us-east-1"   # Bitovi Playground Registry
+    # default     = "us-east-2" # Bitovi AI Registry
+}
+
+variable "registry_arn" {
+    description = "ARN of ECR"
+    type        = string
+}
+
+variable "log_stream_arn" {
+    description = "ARN of Log Stream"
+    type        = string
+}
+
+variable "s3_arn" {
+    description = "ARN of S3 bucket"
+    type        = string
+}
+
+variable "ecs_arn" {
+    description = "ARN of ECS Cluster"
+    type        = string
+}
+
+variable env_file_arn {
+    description = "Image tag used"
+    type        = string
+}
+
+variable log_retention_period {
+    description = "Number of days for task definition log retention"
+    type        = number
+    default = 7
+}
+
+variable cpu_request {
+    description = "Amount of vCPU requested"
+    type        = number
+    default = 1024
+}
+
+variable mem_request {
+    description = "Amount of Mem requested"
+    type        = number
+    default = 2048
+}
+
+variable app_name {
+    description = "Name of App"
+    type        = string
+    default = "ai-coding-agent"
+}
+
+variable image_url {
+    description = "URL to the image"
+    type        = string
+}
+
+variable image_tag {
+    description = "Image tag used"
+    type        = string
+}
+
+variable desired_replica_count {
+    description = "Image tag used"
+    type        = number
+    default = 1
+}

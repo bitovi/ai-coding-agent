@@ -5,10 +5,10 @@ name: Build and Publish
 on:
   workflow_call:
     inputs:
-        image_tag:
-          description: Image tag for container
-          required: true
-          type: string
+      image_tag:
+        description: Image tag for container
+        required: true
+        type: string
 
 env:
   # ECR_URL: 767397775295.dkr.ecr.us-east-2.amazonaws.com/ai/ai-coding-agent # Bitovi AI Registry
@@ -23,10 +23,13 @@ jobs:
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ vars.AWS_PLAYGROUND_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_PLAYGROUND_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+        with: 
+          aws-access-key-id: ${{ vars.AWS_PLAYGROUND_ACCESS_KEY }}                # Bitovi Playground Registry
+          aws-secret-access-key: ${{ secrets.AWS_PLAYGROUND_SECRET_ACCESS_KEY }}  # Bitovi Playground Registry
+          aws-region: us-east-1                                                   # Bitovi Playground Registry
+          # aws-access-key-id: ${{ vars.AWS_ACCESS_KEY_ID_AI }}                   # Bitovi AI Registry
+          # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AI }}        # Bitovi AI Registry
+          #aws-region: us-east-2                                                  # Bitovi AI Registry
 
       - name: Build Docker image
         run: |

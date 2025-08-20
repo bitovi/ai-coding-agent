@@ -1,16 +1,9 @@
-name: Deploy
+name: Create/Update infrastructure
 
 # TODO: Add description
 
 on:
   workflow_dispatch:
-    # image_tag:
-    #   type: string
-    #   required: true
-  workflow_call:
-    # image_tag:
-    #   type: string
-    #   required: true
 
 jobs:  
   deploy:
@@ -37,4 +30,3 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
-      

@@ -1,0 +1,7 @@
+registry_arn = "arn:aws:ecr:us-east-1:755521597925:repository/playground/ai-coding-agent"
+log_stream_arn = "arn:aws:logs:us-east-1:755521597925:log-group:/ecs/ai-coding-agent"
+s3_arn = "arn:aws:s3:::ai-coding-agent-t"
+ecs_arn = "arn:aws:ecs:us-east-1:755521597925:cluster/Bitovi-Playground-ECS-Cluster"
+env_file_arn = "arn:aws:s3:::ai-coding-agent-t/.env"
+image_url =  "755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent"
+image_tag =  "latest"

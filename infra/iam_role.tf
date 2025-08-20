@@ -14,10 +14,19 @@ resource "aws_iam_role" "tdf_execution_role" {
     ]
   })
 
-  inline_policy {
-    name = "ecsTaskExecutionRoleAiCodingAgentInlinePolicy"
+  tags = {
+    CreatedBy = "Phil",
+    CreatedFor = "AI Coding Agent",
+    ManagedBy = "terraform"
+  }
+}
 
-    policy = jsonencode({
+
+resource "aws_iam_role_policy" "test_policy" {
+  name = "ecsTaskExecutionRoleAiCodingAgent"
+  role = aws_iam_role.tdf_execution_role.id
+
+  policy = jsonencode({
       Version = "2012-10-17"
       Statement = [
         {
@@ -32,7 +41,7 @@ resource "aws_iam_role" "tdf_execution_role" {
                 "ecr:GetDownloadUrlForLayer",
                 "ecr:BatchGetImage"
             ],
-            "Resource": "arn:aws:ecr:us-east-1:755521597925:repository/playground/ai-coding-agent"
+            "Resource": var.registry_arn
         },
         {
             "Effect": "Allow",
@@ -40,15 +49,16 @@ resource "aws_iam_role" "tdf_execution_role" {
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
             ],
-            "Resource": "arn:aws:logs:us-east-1:755521597925:log-group:/ecs/ai-coding-agent*"
+            "Resource": "${var.log_stream_arn}*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+            ],
+            "Resource": "${var.s3_arn}*"
         }
       ]
     })
-  }
-
-  tags = {
-    CreatedBy = "Phil",
-    CreatedFor = "AI Coding Agent",
-    ManagedBy = "terraform"
-  }
 }
