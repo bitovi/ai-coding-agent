@@ -150,3 +150,13 @@ shared-repos/
 git-repos/
 local-repos/
 test-tokens/
+
+
+# Terraform files to ignore
+.terraform/           # Terraform's working directory for providers, modules, etc.
+*.tfstate             # Terraform state files (e.g., terraform.tfstate)
+*.tfstate.backup      # Backup state files
+*.tfvars              # Variable definition files (especially if containing sensitive data)
+*.tfvars.json         # JSON variable definition files
+.terraform.tfstate.lock.info # State lock information file
+plan.out              # Saved plan files (e.g., from terraform plan -out=plan.out)

@@ -13,8 +13,11 @@ on:
     #   required: true
 
 jobs:  
-  build-and-publish:
+  deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/infra
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -26,3 +29,13 @@ jobs:
           aws-access-key-id: ${{ vars.AWS_PLAYGROUND_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_PLAYGROUND_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
+      
+      - run: terraform init
+
+      - id: plan
+        run: terraform plan -no-color
+      - run: |
+          echo ${{ steps.plan.outputs.stdout }}
+          echo ${{ steps.plan.outputs.stderr }}
+          echo ${{ steps.plan.outputs.exitcode }}
+      
