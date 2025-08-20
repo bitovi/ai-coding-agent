@@ -323,6 +323,15 @@ Or use the Visual Studio Dev Container to start the production server:
 
 This will build the Dockerfile image, start the frontend and backend applications and handle port forwarding. Consider this a local proudction server for testing purposes. Changes to source made in the devcontainer are propogated to your local source.
 
+#### Ngrok + devcontainer
+If you want to start the Ngrok service from within the dev container:
+```bash
+cp .devcontainer/ngrok.env.example .devcontainer/ngrok.env
+# update the NGROK_AUTHTOKEN value
+```
+Once the devcontainer comes up you can navigate to localhost:4040 and retrieve the tunnel URL.
+
+
 ### 3. Using the Web Dashboard
 
 Navigate to `http://localhost:3000` to access the dashboard where you can:

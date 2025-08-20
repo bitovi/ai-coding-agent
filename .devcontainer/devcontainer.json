@@ -1,9 +1,12 @@
 {
   "name": "AI Coding Agent (Node)",
-  "build": {
-    "context": "..",
-    "dockerfile": "../Dockerfile"
-  },
+  "dockerComposeFile": "docker-compose.devcontainer.yml",
+  "service": "app",
+  "workspaceFolder": "/app",
+
+  "overrideCommand": true,
+  "shutdownAction": "stopCompose",
+  "runServices": ["app", "ngrok"],
 
   "updateRemoteUserUID": true,
 
@@ -14,18 +17,12 @@
         "esbenp.prettier-vscode",
         "ms-azuretools.vscode-docker"
       ],
-      "settings": {
-        "editor.formatOnSave": true
-      }
-    },
-    "settings": {
-      "editor.formatOnSave": true
+      "settings": { "editor.formatOnSave": true }
     }
   },
 
-  "forwardPorts": [3000],
+  "forwardPorts": [3000, 4040],
   "otherPortsAttributes": { "onAutoForward": "notify" },
-  "overrideCommand": true,
-  "runArgs": ["--entrypoint", "/bin/sh"],
+
   "postStartCommand": "npm start"
 }
