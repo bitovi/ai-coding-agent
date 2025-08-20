@@ -7,7 +7,7 @@ on:
 
 jobs:  
   build-and-publish:
-    runs-on: ubunutu-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
