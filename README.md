@@ -28,12 +28,20 @@ This is an AI coding agent that runs Claude with MCP (Model Context Protocol) se
    # Edit .env with your configuration
    ```
 
-3. **Start the server**:
+3. **Build the frontend**:
+  ```bash
+  cd frontend
+  npm ci
+  npm build
+  cd ..
+  ```
+
+4. **Start the server**:
    ```bash
    npm start
    ```
 
-4. **Open the dashboard**:
+5. **Open the dashboard**:
    Navigate to `http://localhost:3000`
 
 ## Architecture Overview
@@ -289,6 +297,14 @@ The proxy provides secure forwarding, automatic authentication, and SSE streamin
    npm run validate
    ```
 
+### Build the frontend
+1. Build the frontend:
+  ```bash
+  cd frontend
+  npm ci
+  npm build
+  ```
+
 ### 2. Starting the Server
 
 Start the development server:
@@ -300,6 +316,12 @@ Or start the production server:
 ```bash
 npm start
 ```
+
+Or use the Visual Studio Dev Container to start the production server:
+- Open command palette
+- Select "Dev Containers: Reopen in Container"
+
+This will build the Dockerfile image, start the frontend and backend applications and handle port forwarding. Consider this a local proudction server for testing purposes. Changes to source made in the devcontainer are propogated to your local source.
 
 ### 3. Using the Web Dashboard
 
