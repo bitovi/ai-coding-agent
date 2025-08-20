@@ -1,0 +1,28 @@
+name: Deploy
+
+# TODO: Add description
+
+on:
+  workflow_dispatch:
+    # image_tag:
+    #   type: string
+    #   required: true
+  workflow_call:
+    # image_tag:
+    #   type: string
+    #   required: true
+
+jobs:  
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ vars.AWS_PLAYGROUND_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_PLAYGROUND_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
