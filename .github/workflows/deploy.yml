@@ -34,8 +34,7 @@ jobs:
 
       - id: plan
         run: terraform plan -no-color
-      - run: |
-          echo ${{ steps.plan.outputs.stdout }}
-          echo ${{ steps.plan.outputs.stderr }}
-          echo ${{ steps.plan.outputs.exitcode }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
       
