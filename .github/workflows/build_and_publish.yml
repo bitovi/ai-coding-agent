@@ -27,56 +27,54 @@ jobs:
       - name: Push Docker image
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 755521597925.dkr.ecr.us-east-1.amazonaws.com
+          docker tag 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }} 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:latest
           docker push 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }}
+          docker push 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:latest
 
-  # slackNotificationSuccess:
-  #   name: Slack Notification (Success)
-  #   runs-on: ubuntu-latest
-  #   needs: build-and-publish
-  #   if: needs.build-and-publish.result == 'success'
-  #   steps:
-  #     - name: Send Success Notification
-  #       uses: slackapi/slack-github-action@v2.1.0
-  #       with:
-  #         webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-  #         webhook-type: incoming-webhook
-  #         payload: |
-  #           blocks:
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "<${{ github.server_url }}/${{ github.repository }}|${{ inputs.service_name }}> *${{ inputs.environment }}* new image has been published :white_check_mark:"
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "Image has been published to ${{ vars.DOCKER_CONTAINER_REGISTRY_HOST }}/${{ inputs.service_name }}:${{ inputs.image_tag }}"
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+  slackNotificationSuccess:
+    name: Slack Notification (Success)
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: needs.build-and-publish.result == 'success'
+    steps:
+      - name: Send Success Notification
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> new image has been published :white_check_mark:"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "Image has been published to 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent:${{ github.run_id }}"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
 
-  # slackNotificationFailure:
-  #   name: Slack Notification (Failure)
-  #   runs-on: ubuntu-latest
-  #   needs: build-and-publish
-  #   if: always() && needs.build-and-publish.result == 'failure'
-  #   steps:
-  #     - name: Send Failure Notification
-  #       uses: slackapi/slack-github-action@v2.1.0
-  #       with:
-  #         webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-  #         webhook-type: incoming-webhook
-  #         payload: |
-  #           blocks:
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "<${{ github.server_url }}/${{ github.repository }}|${{ inputs.service_name }}> *${{ inputs.environment }}* image creation failed :x:"
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "Image ${{ inputs.service_name }}:${{ inputs.image_tag }} to be published"
-  #             - type: "section"
-  #               text:
-  #                 type: "mrkdwn"
-  #                 text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+  slackNotificationFailure:
+    name: Slack Notification (Failure)
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: always() && needs.build-and-publish.result == 'failure'
+    steps:
+      - name: Send Failure Notification
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> image creation failed :x:"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
