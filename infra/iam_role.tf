@@ -49,7 +49,7 @@ resource "aws_iam_role_policy" "test_policy" {
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
             ],
-            "Resource": "${var.log_stream_arn}*"
+            "Resource": "${data.aws_cloudwatch_log_group.log_group.arn}*"
         },
         {
             "Effect": "Allow",

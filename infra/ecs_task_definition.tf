@@ -1,6 +1,5 @@
-resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name = "/ecs"
-  retention_in_days = var.log_retention_period
+data "aws_cloudwatch_log_group" "log_group" {
+  name = var.log_group_name
 }
 
 resource "aws_ecs_task_definition" "ai_coding_agent_td" {
@@ -27,7 +26,7 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
+          "awslogs-group"         = data.aws_cloudwatch_log_group.log_group.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = var.target_environment
         }

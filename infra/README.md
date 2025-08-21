@@ -17,6 +17,6 @@ cp infra/var_files/example.tfvars infra/var_files/<environment-name>.tfvars
 4. Log Group
     - Use the ECS cluster name
 
-**3. Copy the service ARNs and update the tfvars**
-**4. Update the providers.tf file with the correct bucket**
+**3. Update the tfvars**
+**4. Update the providers.tf file with the target bucket**
 **5. Upload the .env file to the S3 bucket, update the tfvars with the file arn**

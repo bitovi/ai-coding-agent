@@ -8,11 +8,6 @@ variable "registry_arn" {
     type        = string
 }
 
-variable "log_stream_arn" {
-    description = "ARN of Log Stream"
-    type        = string
-}
-
 variable "s3_arn" {
     description = "ARN of S3 bucket"
     type        = string
@@ -70,5 +65,10 @@ variable desired_replica_count {
 
 variable target_environment {
     description = "Environemt of application"
+    type        = string
+}
+
+variable log_group_name {
+    description = "Name of log group"
     type        = string
 }

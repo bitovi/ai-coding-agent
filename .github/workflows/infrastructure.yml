@@ -1,11 +1,17 @@
 name: Create/Update infrastructure
 
-# TODO: Add description
-
 on:
   workflow_dispatch:
+    inputs:
+      tf_vars_files:
+        description: "Used in the terraform command, format: -var-file=var-file-1.tfvars -var-file=var-file-2.tfvars"
+        type: string
+        required: true
 
-jobs:  
+env:
+  AWS_REGION: us-east-2
+
+jobs:
   deploy:
     runs-on: ubuntu-latest
     defaults:
@@ -19,14 +25,14 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ vars.AWS_PLAYGROUND_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_PLAYGROUND_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_AI }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AI }}
+          aws-region: ${{ env.AWS_REGION }}
       
       - run: terraform init
 
       - id: plan
-        run: terraform plan -no-color
+        run: terraform plan -no-color ${{ inputs.tf_vars_files }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }}
