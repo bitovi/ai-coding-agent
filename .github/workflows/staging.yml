@@ -6,13 +6,10 @@ on:
     branch:
       - main
 
-env:
-  # ECR_URL: 767397775295.dkr.ecr.us-east-2.amazonaws.com/ai/ai-coding-agent # Bitovi Github
-  ECR_URL: 755521597925.dkr.ecr.us-east-1.amazonaws.com/playground/ai-coding-agent
-
 jobs:
   build-and-publish:
     uses: ./.github/workflows/build_and_publish.yml
     with:
       image_tag: ${{ github.run_id }}
+      environment_tag: staging
     secrets: inherit
