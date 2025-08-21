@@ -1,0 +1,22 @@
+name: Production
+
+on:
+  release:
+    types: [published, created, edited]
+
+jobs:
+  build-and-publish:
+    uses: ./.github/workflows/build_and_publish.yml
+    with:
+      image_tag: ${{ github.run_id }}
+      environment_tag: latest
+    secrets: inherit
+
+  update-infrastructure:
+    uses: ./.github/workflows/infrastructure.yml
+    needs:
+      - build-and-publish
+    with:
+      tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
+      image_tag: ${{ github.run_id }}
+    secrets: inherit

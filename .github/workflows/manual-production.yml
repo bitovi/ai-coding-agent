@@ -1,0 +1,26 @@
+name: Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        type: string
+        description: "Image tag to be deployed"
+        required: true
+
+jobs:
+  build-and-publish:
+    uses: ./.github/workflows/build_and_publish.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      environment_tag: latest
+    secrets: inherit
+
+  update-infrastructure:
+    uses: ./.github/workflows/infrastructure.yml
+    needs:
+      - build-and-publish
+    with:
+      tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
