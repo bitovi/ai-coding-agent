@@ -12,7 +12,7 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
   
   container_definitions = jsonencode([
     {
-      name      = "var.app_name-${var.target_environment}"
+      name      = "${var.app_name}-${var.target_environment}"
       image     = "${var.image_url}:${var.image_tag}"
       cpu       = var.cpu_request
       memory    = var.mem_request

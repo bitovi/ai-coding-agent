@@ -29,7 +29,7 @@ resource "aws_ecs_service" "ai_coding_agent_service" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = var.app_name
+    container_name   = "${var.app_name}-${var.target_environment}"
     container_port   = var.container_port
   }
 
