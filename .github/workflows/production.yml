@@ -9,7 +9,7 @@ jobs:
     uses: ./.github/workflows/build_and_publish.yml
     with:
       image_tag: ${{ github.run_id }}
-      environment_tag: latest
+      environment_tag: production
     secrets: inherit
 
   update-infrastructure:
@@ -20,4 +20,5 @@ jobs:
       tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
       image_tag: ${{ github.run_id }}
       domain_name: "bit"
+      environment_tag: production
     secrets: inherit

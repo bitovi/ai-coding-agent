@@ -15,6 +15,10 @@ on:
         description: Target domain name
         type: string
         required: true
+      environment_tag:
+        description: Image tag for container
+        required: true
+        type: string
 
 env:
   AWS_REGION: us-east-2
@@ -63,7 +67,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> deployment rolled out successfully :white_check_mark:"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}}  deployment rolled out successfully :white_check_mark:"
               - type: "section"
                 text:
                   type: "mrkdwn"
@@ -89,7 +93,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> deployment rolled out failed :x:"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} deployment rolled out failed :x:"
               - type: "section"
                 text:
                   type: "mrkdwn"

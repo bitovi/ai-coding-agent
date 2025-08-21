@@ -58,7 +58,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> new image has been published :white_check_mark:"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> new ${{ inputs.environment_tag}} image has been published :white_check_mark:"
               - type: "section"
                 text:
                   type: "mrkdwn"
@@ -84,7 +84,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> image creation failed :x:"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} image creation failed :x:"
               - type: "section"
                 text:
                   type: "mrkdwn"
