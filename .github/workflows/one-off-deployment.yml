@@ -1,4 +1,4 @@
-name: Build+Deploy on the Fly
+name: Build+Deploy on the fly
 
 on:
   workflow_dispatch:

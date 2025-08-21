@@ -1,4 +1,4 @@
-name: Build+Deploy on the Fly
+name: Destroy on the fly Deployment
 
 on:
   workflow_dispatch:
