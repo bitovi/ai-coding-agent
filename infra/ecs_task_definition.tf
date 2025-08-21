@@ -29,7 +29,7 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = var.app_name
+          "awslogs-stream-prefix" = var.target_environment
         }
       },
       "environmentFiles": [

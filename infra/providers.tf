@@ -1,18 +1,11 @@
 terraform {
 
-  backend "s3" {      # Bitovi Playground Registry 
-    bucket         = "bitovi-terraform-state-files-pg"
-    key            = "ai-coding-agent/terraform.tfstate"
-    region         = "us-east-1"
+  backend "s3" {
+    bucket         = "ai-coding-agent"
+    key            = "terraform/terraform.tfstate"
+    region         = "us-east-2"
     encrypt        = true
   }
-
-  # backend "s3" {    # Bitovi AI Registry
-  #   bucket         = "ai-coding-agent"
-  #   key            = "terraform/terraform.tfstate"
-  #   region         = "us-east-2"
-  #   encrypt        = true
-  # }
 
   required_providers {
     aws = {

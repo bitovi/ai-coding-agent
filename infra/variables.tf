@@ -1,8 +1,6 @@
 variable "aws_region" {
     description = "AWS region for deployment"
     type        = string
-    default     = "us-east-1"   # Bitovi Playground Registry
-    # default     = "us-east-2" # Bitovi AI Registry
 }
 
 variable "registry_arn" {
@@ -68,4 +66,9 @@ variable desired_replica_count {
     description = "Image tag used"
     type        = number
     default = 1
+}
+
+variable target_environment {
+    description = "Environemt of application"
+    type        = string
 }
