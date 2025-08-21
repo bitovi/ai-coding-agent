@@ -6,36 +6,25 @@ on:
     types: [published, created, edited]
 
 jobs:
-  test:
+  get-last-successful-staging-run-id:
     runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.last_successful_build.outputs.run-id }}
     steps:
       - name: Find last successful build
-        uses: SamhammerAG/last-successful-build-action@v4
+        uses: SamhammerAG/last-successful-build-action@v7.2
         with:
           branch: 'main'
           workflow: 'Staging'
         id: last_successful_build
 
-      - name: Use last successful run_id
-        run: echo "Last successful run ID = ${{ steps.last_successful_build.outputs.run_id }}"
-
-
-  # build-and-publish:
-  #   uses: ./.github/workflows/build_and_publish.yml
-  #   with:
-  #     image_tag: ${{ github.run_id }}
-  #     environment_tag: production
-  #   secrets: inherit
-
-  # Get the run ID from the last successful staging run for deployment
-
-  # update-infrastructure:
-  #   uses: ./.github/workflows/infrastructure.yml
-  #   needs:
-  #     - build-and-publish
-  #   with:
-  #     tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
-  #     image_tag: ${{ github.run_id }}
-  #     domain_name: "bit"
-  #     environment_tag: production
-  #   secrets: inherit
+  update-infrastructure:
+    uses: ./.github/workflows/infrastructure.yml
+    needs:
+      - get-last-successful-staging-run-id
+    with:
+      tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
+      image_tag: ${{ needs.get-last-successful-staging-run-id.outputs.run_id }}
+      domain_name: "bit"
+      environment_tag: production
+    secrets: inherit
