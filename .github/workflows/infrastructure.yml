@@ -1,10 +1,14 @@
 name: Create/Update infrastructure
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tf_vars_files:
         description: "Used in the terraform command, format: -var-file=var-file-1.tfvars -var-file=var-file-2.tfvars"
+        type: string
+        required: true
+      image_tag:
+        description: Image tag
         type: string
         required: true
 
@@ -32,7 +36,61 @@ jobs:
       - run: terraform init
 
       - id: plan
-        run: terraform plan -no-color ${{ inputs.tf_vars_files }}
+        run: terraform plan -no-color ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}"
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }}
+        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}"
+      
+      # TODO: Smoke testing
+    
+  slackNotificationSuccess:
+    name: Slack Notification (Success)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    steps:
+      - name: Send Success Notification
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> deployment rolled out successfully :white_check_mark:"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "Image deployed: ${{ inputs.service_name }}:${{ inputs.image_tag }}"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+
+  slackNotificationFailure:
+    name: Slack Notification (Failure)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always() && needs.deploy.result == 'failure'
+    steps:
+      - name: Send Failure Notification
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> deployment rolled out failed :x:"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "Image deployed: ${{ inputs.service_name }}:${{ inputs.image_tag }}"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
