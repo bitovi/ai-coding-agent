@@ -1,9 +1,13 @@
 name: Production
 
 on:
-  workflow_dispatch:
   release:
-    types: [published, created, edited]
+    types: [published]
+
+env:
+  ECR_URL: 767397775295.dkr.ecr.us-east-2.amazonaws.com
+  ECR_PATH: /ai/ai-coding-agent
+  AWS_REGION: us-east-2
 
 jobs:
   get-last-successful-staging-run-id:
@@ -48,4 +52,4 @@ jobs:
           aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
           docker pull $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }}
           docker tag $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }} $ECR_URL$ECR_PATH:production
-          docker push $ECR_URL$ECR_PATH:${{ inputs.environment_tag }}
+          docker push $ECR_URL$ECR_PATH:production
