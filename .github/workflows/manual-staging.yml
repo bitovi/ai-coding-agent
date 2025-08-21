@@ -1,19 +1,18 @@
 name: Staging
 
 on:
-  push:
-    branch:
-      - main
-    paths-ignore:
-      - README.md
-      - .devcontainer/**
-      - .github/workflows/*production*
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        type: string
+        description: "Image tag to be deployed"
+        required: true
 
 jobs:
   build-and-publish:
     uses: ./.github/workflows/build_and_publish.yml
     with:
-      image_tag: ${{ github.run_id }}
+      image_tag: ${{ inputs.image_tag }}
       environment_tag: staging
     secrets: inherit
 
@@ -23,5 +22,5 @@ jobs:
       - build-and-publish
     with:
       tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
-      image_tag: ${{ github.run_id }}
+      image_tag: ${{ inputs.image_tag }}
     secrets: inherit
