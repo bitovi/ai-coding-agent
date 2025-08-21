@@ -7,8 +7,9 @@ on:
     paths-ignore:
       - README.md
       - .devcontainer/**
-      - .github/workflows/*production*
-      - .github/workflows/manual-staging.yml
+      - .github/workflows/production*
+      - .github/workflows/manual-*
+      - .github/workflows/*one-off-deployment*
 
 jobs:
   build-and-publish:

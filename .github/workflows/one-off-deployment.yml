@@ -1,0 +1,31 @@
+name: Build+Deploy on the Fly
+
+on:
+  workflow_dispatch:
+    inputs:
+      unique_id:
+        type: string
+        description: unique id to for the deployment
+      domain_name:
+        type: string
+        description: unique domain name for the deployment
+
+jobs:
+  build-and-publish:
+    uses: ./.github/workflows/build_and_publish.yml
+    with:
+      image_tag: ${{ github.run_id }}
+      environment_tag: ${{ inputs.unique_id}}
+    secrets: inherit
+
+  update-infrastructure:
+    uses: ./.github/workflows/infrastructure.yml
+    needs:
+      - build-and-publish
+    with:
+      tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
+      image_tag: ${{ github.run_id }}
+      domain_name: ${{ inputs.domain_name }}
+      environment_tag: ${{ inputs.unique_id}}
+      s3_key: "terraform/${{ inputs.unique_id}}.tfstate"
+    secrets: inherit

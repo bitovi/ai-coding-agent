@@ -1,0 +1,46 @@
+name: Build+Deploy on the Fly
+
+on:
+  workflow_dispatch:
+    inputs:
+      unique_id:
+        type: string
+        description: unique id to for the deployment
+      domain_name:
+        type: string
+        description: unique domain name for the deployment
+      image_tag:
+        type: string
+        description: unique domain name for the deployment
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/infra
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_AI }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AI }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - run: terraform init -backend-config="key=terraform/${{ inputs.unique_id}}.tfstate"
+
+      - name: Terraform Destroy
+        if: ${{ inputs.unique_id }} != 'staging' && ${{ inputs.unique_id }} != 'production'
+        run: |
+          terraform destroy -auto-approve -var-file=var_files/ai.tfvars.safe \
+            -var "image_tag=${{ inputs.image_tag }}" \
+            -var "domain_name=${{ inputs.domain_name }}" \
+            -var "target_environment=${{ inputs.unique_id }}"
+  

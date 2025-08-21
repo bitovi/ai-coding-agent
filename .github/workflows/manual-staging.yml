@@ -9,18 +9,13 @@ on:
         required: true
 
 jobs:
-  build-and-publish:
-    uses: ./.github/workflows/build_and_publish.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-      environment_tag: staging
-    secrets: inherit
-
   update-infrastructure:
     uses: ./.github/workflows/infrastructure.yml
-    needs:
-      - build-and-publish
     with:
       tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
       image_tag: ${{ inputs.image_tag }}
+      domain_name: "bit-staging"
+      environment_tag: staging
+      s3_key: "terraform/staging.tfstate"
     secrets: inherit
+
