@@ -1,4 +1,4 @@
-name: Staging
+name: Manual Staging Deployment
 
 on:
   workflow_dispatch:
