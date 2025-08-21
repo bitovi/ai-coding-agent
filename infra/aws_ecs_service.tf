@@ -15,7 +15,7 @@ data "aws_security_group" "default_security_group" {
 }
 
 resource "aws_ecs_service" "ai_coding_agent_service" {
-  name            = "${var.app_name}-service"
+  name            = "${var.app_name}-service-${var.target_environment}"
   cluster         = var.ecs_arn
   task_definition = aws_ecs_task_definition.ai_coding_agent_td.arn
   launch_type     = "FARGATE"
