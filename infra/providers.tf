@@ -2,7 +2,7 @@ terraform {
 
   backend "s3" {
     bucket         = "ai-coding-agent"
-    key            = "terraform/terraform.tfstate"
+    # key            = "terraform/terraform.tfstate"
     region         = "us-east-2"
     encrypt        = true
   }

@@ -27,4 +27,25 @@ jobs:
       image_tag: ${{ needs.get-last-successful-staging-run-id.outputs.run_id }}
       domain_name: "bit"
       environment_tag: production
+      s3_key: "terraform/production.tfstate"
     secrets: inherit
+  
+  update-ecr-tracking:
+    runs-on: ubuntu-latest
+    needs:
+      - get-last-successful-staging-run-id
+      - update-infrastructure
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with: 
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_AI }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AI }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Push Docker image
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
+          docker pull $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }}
+          docker tag $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }} $ECR_URL$ECR_PATH:production
+          docker push $ECR_URL$ECR_PATH:${{ inputs.environment_tag }}

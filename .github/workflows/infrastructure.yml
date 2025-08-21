@@ -16,7 +16,11 @@ on:
         type: string
         required: true
       environment_tag:
-        description: Image tag for container
+        description: Environment tag for container
+        required: true
+        type: string
+      s3_key:
+        description: S3 key for tf state
         required: true
         type: string
 
@@ -41,16 +45,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AI }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - run: terraform init
+      - run: terraform init -backend-config="key=${{ inputs.s3_key }}"
 
       - id: plan
-        run: terraform plan -no-color ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}" -var "domain_name=${{ inputs.domain_name }}"
+        run: |
+          terraform plan -no-color ${{ inputs.tf_vars_files }} \
+            -var "image_tag=${{ inputs.image_tag }}" \
+            -var "domain_name=${{ inputs.domain_name }}" \
+            -var "target_environment=${{ inputs.environment_tag }}"
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}" -var "domain_name=${{ inputs.domain_name }}"
-      
+        run: |
+          terraform apply -auto-approve ${{ inputs.tf_vars_files }} \
+            -var "image_tag=${{ inputs.image_tag }}" \
+            -var "domain_name=${{ inputs.domain_name }}" \
+            -var "target_environment=${{ inputs.environment_tag }}"
+
       # TODO: Smoke testing
-    
+
   slackNotificationSuccess:
     name: Slack Notification (Success)
     runs-on: ubuntu-latest

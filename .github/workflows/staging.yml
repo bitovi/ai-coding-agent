@@ -26,4 +26,5 @@ jobs:
       image_tag: ${{ github.run_id }}
       domain_name: "bit-staging"
       environment_tag: staging
+      s3_key: "terraform/staging.tfstate"
     secrets: inherit
