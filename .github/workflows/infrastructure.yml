@@ -11,6 +11,10 @@ on:
         description: Image tag
         type: string
         required: true
+      domain_name:
+        description: Target domain name
+        type: string
+        required: true
 
 env:
   AWS_REGION: us-east-2
@@ -36,10 +40,10 @@ jobs:
       - run: terraform init
 
       - id: plan
-        run: terraform plan -no-color ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}"
+        run: terraform plan -no-color ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}" -var "domain_name=${{ inputs.domain_name }}"
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}"
+        run: terraform apply -auto-approve ${{ inputs.tf_vars_files }} -var "image_tag=${{ inputs.image_tag }}" -var "domain_name=${{ inputs.domain_name }}"
       
       # TODO: Smoke testing
     

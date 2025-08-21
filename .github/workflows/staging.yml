@@ -24,4 +24,5 @@ jobs:
     with:
       tf_vars_files: "-var-file=var_files/ai.tfvars.safe"
       image_tag: ${{ github.run_id }}
+      domain_name: "bit-staging"
     secrets: inherit

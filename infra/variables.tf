@@ -72,3 +72,16 @@ variable log_group_name {
     description = "Name of log group"
     type        = string
 }
+
+variable container_port {
+    description = "Port for application"
+    type        = number
+}
+
+variable hosted_zone_id {
+    type        = string
+}
+
+variable domain_name {
+    type        = string
+}
