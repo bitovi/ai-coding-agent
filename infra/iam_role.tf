@@ -1,5 +1,5 @@
 resource "aws_iam_role" "tdf_execution_role" {
-  name = "ecsTaskExecutionRoleAiCodingAgent"
+  name = "ecsTaskExecutionRoleAiCodingAgent-${var.target_environment}"
 
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
@@ -23,7 +23,7 @@ resource "aws_iam_role" "tdf_execution_role" {
 
 
 resource "aws_iam_role_policy" "test_policy" {
-  name = "ecsTaskExecutionRoleAiCodingAgent"
+  name = "ecsTaskExecutionRoleAiCodingAgent-${var.target_environment}"
   role = aws_iam_role.tdf_execution_role.id
 
   policy = jsonencode({

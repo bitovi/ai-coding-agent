@@ -1,5 +1,5 @@
 resource "aws_security_group" "alb_sg" {
-  name        = "${var.app_name}-alb-sg"
+  name        = "${var.app_name}-alb-sg-${var.target_environment}"
   description = "ALB SG"
   vpc_id      = data.aws_vpc.default_vpc.id
 
@@ -22,7 +22,7 @@ resource "aws_security_group" "alb_sg" {
 }
 
 resource "aws_security_group" "ecs_service_sg" {
-  name        = "${var.app_name}-ecs-sg"
+  name        = "${var.app_name}-ecs-sg-${var.target_environment}"
   description = "ECS tasks behind ALB"
   vpc_id      = data.aws_vpc.default_vpc.id
 
@@ -44,7 +44,7 @@ resource "aws_security_group" "ecs_service_sg" {
 }
 
 resource "aws_lb" "app" {
-  name               = "${var.app_name}-alb"
+  name               = "${var.app_name}-alb-${var.target_environment}"
   load_balancer_type = "application"
   internal           = false
   security_groups    = [aws_security_group.alb_sg.id]
@@ -52,7 +52,7 @@ resource "aws_lb" "app" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.app_name}-tg"
+  name        = "${var.app_name}-tg-${var.target_environment}"
   port        = var.container_port
   protocol    = "HTTP"
   target_type = "ip"                 # required for Fargate
