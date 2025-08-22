@@ -61,12 +61,29 @@ jobs:
         run: |
           cluster=$(terraform output -raw ecs_cluster_name)
           service=$(terraform output -raw ecs_service_name)
-          read -r rollout td <<< "$(aws ecs describe-services \
-            --cluster "$cluster" --services "$service" \
-            --query "services[0].deployments[?status=='PRIMARY']|[0].[rolloutState,taskDefinition]" \
-            --output text)"
-          echo "PRIMARY rolloutState: $rollout"
-          test "$rollout" = "COMPLETED"
+
+          deadline=$((SECONDS+300))
+          while :; do
+          read -r rollout td reason <<< "$(aws ecs describe-services \
+          --cluster "$cluster" --services "$service" \
+          --query "services[0].deployments[?status=='PRIMARY']|[0].[rolloutState,taskDefinition,rolloutStateReason]" \
+          --output text || true)"
+
+          echo "PRIMARY rolloutState: ${rollout:-<none>} (taskDefinition=${td:-n/a})"
+          if [[ "$rollout" == "COMPLETED" ]]; then
+            echo "Rollout completed"
+            break
+          fi
+          if [[ "$rollout" == "FAILED" ]]; then
+            echo "Rollout FAILED: $reason"
+            exit 1
+          fi
+          if (( SECONDS >= deadline )); then
+            echo "Timed out after 5 minutes. Last state: ${rollout:-unknown}. Reason: ${reason:-n/a}"
+            exit 1
+          fi
+          sleep 5
+          done
 
       - name: Wait for Target Group healthy
         run: |
