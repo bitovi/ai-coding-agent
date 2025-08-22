@@ -63,7 +63,7 @@ jobs:
           terraform apply -auto-approve ${{ inputs.tf_vars_files }} \
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
-            -var "target_environment=${{ inputs.environment_tag }}"
+            -var "target_environment=${{ inputs.environment_tag }}" \
             -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
       # TODO: Smoke testing
