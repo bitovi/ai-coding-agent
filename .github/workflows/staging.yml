@@ -32,3 +32,11 @@ jobs:
       s3_key: "terraform/staging.tfstate"
       enable_execute_command: true
     secrets: inherit
+  
+  smoke_testing:
+    uses: ./.github/workflows/smoke_testing.yml
+    needs:
+      - update-infrastructure
+    with:
+      s3_key: "terraform/staging.tfstate"
+    secrets: inherit

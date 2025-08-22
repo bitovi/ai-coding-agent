@@ -53,3 +53,11 @@ jobs:
           docker pull $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }}
           docker tag $ECR_URL$ECR_PATH:${{ needs.get-last-successful-staging-run-id.outputs.run_id }} $ECR_URL$ECR_PATH:production
           docker push $ECR_URL$ECR_PATH:production
+  
+  smoke_testing:
+    uses: ./.github/workflows/smoke_testing.yml
+    needs:
+      - update-infrastructure
+    with:
+      s3_key: "terraform/staging.tfstate"
+    secrets: inherit

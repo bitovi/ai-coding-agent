@@ -1,36 +1,23 @@
-name: Create/Update infrastructure
+name: Smoke Test
 
 on:
+  workflow_dispatch:
+    s3_key:
+        description: S3 key for tf state
+        required: true
+        type: choice
+        options:
+          - 'terraform/staging.tfstate'
+          - 'terraform/production.tfstate'
   workflow_call:
     inputs:
-      tf_vars_files:
-        description: "Used in the terraform command, format: -var-file=var-file-1.tfvars -var-file=var-file-2.tfvars"
-        type: string
-        required: true
-      image_tag:
-        description: Image tag
-        type: string
-        required: true
-      domain_name:
-        description: Target domain name
-        type: string
-        required: true
-      environment_tag:
-        description: Environment tag for container
-        required: true
-        type: string
       s3_key:
         description: S3 key for tf state
         required: true
         type: string
-      enable_execute_command:
-        type: boolean
-        default: false
 
 env:
   AWS_REGION: us-east-2
-  ECR_URL: 767397775295.dkr.ecr.us-east-2.amazonaws.com
-  ECR_PATH: /ai/ai-coding-agent
 
 jobs:
   deploy:
@@ -52,21 +39,43 @@ jobs:
       
       - run: terraform init -backend-config="key=${{ inputs.s3_key }}"
 
-      - id: plan
+      - name: Wait for ECS service stable
         run: |
-          terraform plan -no-color ${{ inputs.tf_vars_files }} \
-            -var "image_tag=${{ inputs.image_tag }}" \
-            -var "domain_name=${{ inputs.domain_name }}" \
-            -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
+          cluster=$(terraform output -raw ecs_cluster_name)
+          service=$(terraform output -raw ecs_service_name)
+          aws ecs wait services-stable --cluster "$cluster" --services "$service"
 
-      - name: Terraform Apply
+      - name: Verify rollout completed
         run: |
-          terraform apply -auto-approve ${{ inputs.tf_vars_files }} \
-            -var "image_tag=${{ inputs.image_tag }}" \
-            -var "domain_name=${{ inputs.domain_name }}" \
-            -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
+          cluster=$(terraform output -raw ecs_cluster_name)
+          service=$(terraform output -raw ecs_service_name)
+          read -r rollout td <<< "$(aws ecs describe-services \
+            --cluster "$cluster" --services "$service" \
+            --query "services[0].deployments[?status=='PRIMARY']|[0].[rolloutState,taskDefinition]" \
+            --output text)"
+          echo "PRIMARY rolloutState: $rollout"
+          test "$rollout" = "COMPLETED"
+
+      - name: Wait for Target Group healthy
+        run: |
+          tg=$(terraform output -raw target_group_arn)
+          deadline=$((SECONDS+600))
+          while :; do
+          states=$(aws elbv2 describe-target-health --target-group-arn "$tg"  \
+            --query "TargetHealthDescriptions[].TargetHealth.State" --output text || true)
+          echo "Target states: $states"
+          if [ -n "$states" ] && ! grep -qv healthy <<< "$states"; then
+          echo "All targets healthy"; break
+          fi
+          [ $SECONDS -gt $deadline ] && echo "Timed out waiting for healthy targets" && exit 1
+          sleep 5
+          done
+
+      - name: App health check via ALB
+        run: |
+          url=$(terraform output -raw alb_dns_name)
+          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/healthz" -o /dev/null
+
 
   slackNotificationSuccess:
     name: Slack Notification (Success)
@@ -84,11 +93,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} deployment created :white_check_mark:"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "Deploying image: ${{ env.ECR_URL }}${{ env.ECR_PATH }}:${{ inputs.image_tag }}"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} smoke testing successful :white_check_mark:"
               - type: "section"
                 text:
                   type: "mrkdwn"
@@ -110,11 +115,7 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} deployment creation failed :x:"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "Attempted to deploy image: ${{ env.ECR_URL }}${{ env.ECR_PATH }}:${{ inputs.image_tag }}"
+                  text: "<${{ github.server_url }}/${{ github.repository }}|AI Coding Agent> ${{ inputs.environment_tag}} smoke testing failed :x:"
               - type: "section"
                 text:
                   type: "mrkdwn"
