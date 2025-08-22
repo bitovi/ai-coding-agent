@@ -9,6 +9,10 @@ data "aws_subnets" "default_subnets" {
     }
 }
 
+data "aws_ecs_cluster" "ecs" {
+  cluster_name = var.ecs_name
+}
+
 resource "aws_security_group" "ecs_service_sg" {
   name        = "${var.app_name}-ecs-sg-${var.target_environment}"
   description = "ECS tasks behind ALB"
@@ -33,7 +37,7 @@ resource "aws_security_group" "ecs_service_sg" {
 
 resource "aws_ecs_service" "ai_coding_agent_service" {
   name            = "${var.app_name}-service-${var.target_environment}"
-  cluster         = var.ecs_arn
+  cluster         = data.aws_ecs_cluster.ecs.arn
   task_definition = aws_ecs_task_definition.ai_coding_agent_td.arn
   launch_type     = "FARGATE"
   desired_count   = var.desired_replica_count

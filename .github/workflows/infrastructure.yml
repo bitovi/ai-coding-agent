@@ -66,7 +66,43 @@ jobs:
             -var "target_environment=${{ inputs.environment_tag }}" \
             -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
-      # TODO: Smoke testing
+      - name: Wait for ECS service stable
+        run: |
+          cluster=$(terraform output -raw ecs_cluster_name)
+          service=$(terraform output -raw ecs_service_name)
+          aws ecs wait services-stable --cluster "$cluster" --services "$service"
+
+      - name: Verify rollout completed
+        run: |
+          cluster=$(terraform output -raw ecs_cluster_name)
+          service=$(terraform output -raw ecs_service_name)
+          read -r rollout td <<< "$(aws ecs describe-services \
+            --cluster "$cluster" --services "$service" \
+            --query "services[0].deployments[?status=='PRIMARY']|[0].[rolloutState,taskDefinition]" \
+            --output text)"
+          echo "PRIMARY rolloutState: $rollout"
+          test "$rollout" = "COMPLETED"
+
+      - name: Wait for Target Group healthy
+        run: |
+          tg=$(terraform output -raw target_group_arn)
+          deadline=$((SECONDS+600))
+          while :; do
+          states=$(aws elbv2 describe-target-health --target-group-arn "$tg"  \
+            --query "TargetHealthDescriptions[].TargetHealth.State" --output text || true)
+          echo "Target states: $states"
+          if [ -n "$states" ] && ! grep -qv healthy <<< "$states"; then
+          echo "All targets healthy"; break
+          fi
+          [ $SECONDS -gt $deadline ] && echo "Timed out waiting for healthy targets" && exit 1
+          sleep 5
+          done
+
+      - name: App health check via ALB
+        run: |
+          url=$(terraform output -raw alb_dns_name)
+          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/healthz" -o /dev/null
+
 
   slackNotificationSuccess:
     name: Slack Notification (Success)

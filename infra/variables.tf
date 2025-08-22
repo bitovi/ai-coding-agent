@@ -13,11 +13,6 @@ variable "s3_arn" {
     type        = string
 }
 
-variable "ecs_arn" {
-    description = "ARN of ECS Cluster"
-    type        = string
-}
-
 variable env_file_arn {
     description = "Image tag used"
     type        = string
@@ -89,4 +84,8 @@ variable domain_name {
 variable enable_execute_command {
     type = bool
     default = false
+}
+
+variable ecs_name {
+    type        = string
 }
