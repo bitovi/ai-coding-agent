@@ -608,3 +608,9 @@ Look at https://raw.githubusercontent.com/bitovi/claude-experiments/refs/heads/m
 with access tokens.
 
 
+## Deploying
+
+Terraform infrastructure for a production-ready service is included within the [infra](./infra/README.md) folder. Additionally [Github Actions](.github/workflows/) are available to create a fully automated CI/CD/ST process.
+
+
+

@@ -1,0 +1,10 @@
+registry_arn = "arn:aws:ecr:us-east-2:767397775295:repository/ai/ai-coding-agent"
+s3_arn = "arn:aws:s3:::ai-coding-agent"
+env_file_arn = "arn:aws:s3:::ai-coding-agent/env_files/test/.env"
+image_url =  "767397775295.dkr.ecr.us-east-2.amazonaws.com/ai/ai-coding-agent"
+image_tag =  "staging"
+aws_region = "us-east-2"
+log_group_name = "ai-enablement-cluster"
+container_port = 3000
+hosted_zone_id = "Z088938213M784NAAX7NY"
+ecs_name = "ai-enablement-cluster"
