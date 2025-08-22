@@ -2,17 +2,29 @@ name: Smoke Test
 
 on:
   workflow_dispatch:
-    s3_key:
+    inputs:
+      s3_key:
         description: S3 key for tf state
         required: true
         type: choice
         options:
           - 'terraform/staging.tfstate'
           - 'terraform/production.tfstate'
+      environment_tag:
+        description: Environment tag for container
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
   workflow_call:
     inputs:
       s3_key:
         description: S3 key for tf state
+        required: true
+        type: string
+      environment_tag:
+        description: Environment tag for container
         required: true
         type: string
 
@@ -20,7 +32,7 @@ env:
   AWS_REGION: us-east-2
 
 jobs:
-  deploy:
+  run-tests:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,8 +92,8 @@ jobs:
   slackNotificationSuccess:
     name: Slack Notification (Success)
     runs-on: ubuntu-latest
-    needs: deploy
-    if: needs.deploy.result == 'success'
+    needs: run-tests
+    if: needs.run-tests.result == 'success'
     steps:
       - name: Send Success Notification
         uses: slackapi/slack-github-action@v2.1.0
@@ -102,8 +114,8 @@ jobs:
   slackNotificationFailure:
     name: Slack Notification (Failure)
     runs-on: ubuntu-latest
-    needs: deploy
-    if: always() && needs.deploy.result == 'failure'
+    needs: run-tests
+    if: always() && needs.run-tests.result == 'failure'
     steps:
       - name: Send Failure Notification
         uses: slackapi/slack-github-action@v2.1.0
