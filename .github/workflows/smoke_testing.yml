@@ -103,7 +103,7 @@ jobs:
       - name: App health check via ALB
         run: |
           url=$(terraform output -raw alb_dns_name)
-          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/healthz" -o /dev/null
+          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/health" 
 
 
   slackNotificationSuccess:
