@@ -9,9 +9,26 @@ data "aws_subnets" "default_subnets" {
     }
 }
 
-data "aws_security_group" "default_security_group" {
-    vpc_id = data.aws_vpc.default_vpc.id
-    name   = "default"
+resource "aws_security_group" "ecs_service_sg" {
+  name        = "${var.app_name}-ecs-sg-${var.target_environment}"
+  description = "ECS tasks behind ALB"
+  vpc_id      = data.aws_vpc.default_vpc.id
+
+  ingress {
+    description     = "From ALB only"
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
 }
 
 resource "aws_ecs_service" "ai_coding_agent_service" {
@@ -20,6 +37,7 @@ resource "aws_ecs_service" "ai_coding_agent_service" {
   task_definition = aws_ecs_task_definition.ai_coding_agent_td.arn
   launch_type     = "FARGATE"
   desired_count   = var.desired_replica_count
+  enable_execute_command = var.enable_execute_command 
 
   network_configuration {
     subnets         = data.aws_subnets.default_subnets.ids

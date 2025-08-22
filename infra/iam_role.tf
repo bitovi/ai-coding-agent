@@ -22,7 +22,7 @@ resource "aws_iam_role" "tdf_execution_role" {
 }
 
 
-resource "aws_iam_role_policy" "test_policy" {
+resource "aws_iam_role_policy" "execution_role_policy" {
   name = "ecsTaskExecutionRoleAiCodingAgent-${var.target_environment}"
   role = aws_iam_role.tdf_execution_role.id
 
@@ -62,3 +62,50 @@ resource "aws_iam_role_policy" "test_policy" {
       ]
     })
 }
+
+resource "aws_iam_role" "tdf_task_role" {
+  name = "ecsTaskRoleAiCodingAgent-${var.target_environment}"
+
+  assume_role_policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+  })
+
+  tags = {
+    CreatedBy = "Phil",
+    CreatedFor = "AI Coding Agent",
+    ManagedBy = "terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "task_role_policy" {
+  name = "ecsTaskRoleAiCodingAgent-${var.target_environment}"
+  role = aws_iam_role.tdf_task_role.id
+
+  policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Action   = [
+            "ssmmessages:CreateControlChannel",
+            "ssmmessages:CreateDataChannel",
+            "ssmmessages:OpenControlChannel",
+            "ssmmessages:OpenDataChannel",
+            "ecs:ExecuteCommand"
+          ]
+          Effect   = "Allow"
+          Resource = "*"
+        },
+      ]
+    })
+}
+
+

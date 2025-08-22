@@ -21,28 +21,6 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
-resource "aws_security_group" "ecs_service_sg" {
-  name        = "${var.app_name}-ecs-sg-${var.target_environment}"
-  description = "ECS tasks behind ALB"
-  vpc_id      = data.aws_vpc.default_vpc.id
-
-  ingress {
-    description     = "From ALB only"
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
-  }
-}
-
 resource "aws_lb" "app" {
   name               = "${var.app_name}-alb-${var.target_environment}"
   load_balancer_type = "application"

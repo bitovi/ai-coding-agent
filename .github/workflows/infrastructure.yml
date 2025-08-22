@@ -23,6 +23,9 @@ on:
         description: S3 key for tf state
         required: true
         type: string
+      enable_execute_command:
+        type: boolean
+        default: false
 
 env:
   AWS_REGION: us-east-2
@@ -52,7 +55,8 @@ jobs:
           terraform plan -no-color ${{ inputs.tf_vars_files }} \
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
-            -var "target_environment=${{ inputs.environment_tag }}"
+            -var "target_environment=${{ inputs.environment_tag }}" \
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
       - name: Terraform Apply
         run: |
@@ -60,6 +64,7 @@ jobs:
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}"
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
       # TODO: Smoke testing
 

@@ -17,5 +17,6 @@ jobs:
       domain_name: "bit-staging"
       environment_tag: staging
       s3_key: "terraform/staging.tfstate"
+      enable_execute_command: true
     secrets: inherit
 

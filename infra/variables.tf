@@ -85,3 +85,8 @@ variable hosted_zone_id {
 variable domain_name {
     type        = string
 }
+
+variable enable_execute_command {
+    type = bool
+    default = false
+}

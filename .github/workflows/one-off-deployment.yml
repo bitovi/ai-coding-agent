@@ -28,4 +28,5 @@ jobs:
       domain_name: ${{ inputs.domain_name }}
       environment_tag: ${{ inputs.unique_id}}
       s3_key: "terraform/${{ inputs.unique_id}}.tfstate"
+      enable_execute_command: true
     secrets: inherit
