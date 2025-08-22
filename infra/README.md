@@ -1,7 +1,7 @@
 # AI-Coding-Agent Infrastructure
 The Ai-Coding-Agent infrastructure is managed by Terraform, deployed to AWS and uses the AWS ECS service.
 
-### Deployments to new organization / accounts
+## Deployments to new organization / accounts
 
 **1. Create a new tfvars file**:
 ```bash
@@ -20,3 +20,18 @@ cp infra/var_files/example.tfvars infra/var_files/<environment-name>.tfvars
 **3. Update the tfvars**
 **4. Update the providers.tf file with the target bucket**
 **5. Upload the .env file to the S3 bucket, update the tfvars with the file arn**
+
+
+
+## SSHing into containers
+
+All the values can be found in the ECS console for the specific deployment. At the moment, only staging deployments are open to SSH access.
+
+```bash
+aws ecs execute-command \
+        --cluster <cluster name> \
+        --task <task id> \
+        --container <container name> \
+        --command "/bin/bash" \
+        --interactive
+```

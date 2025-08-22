@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - README.md
+      - '**/README.md'
       - .devcontainer/**
       - .github/workflows/production*
       - .github/workflows/manual-*
