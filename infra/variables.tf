@@ -89,3 +89,8 @@ variable enable_execute_command {
 variable ecs_name {
     type        = string
 }
+
+variable "acm_certificate_arn" {
+  type        = string
+  description = "ARN of the issued ACM certificate in the same region as the ALB"
+}
