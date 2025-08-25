@@ -151,3 +151,13 @@ shared-repos/
 git-repos/
 local-repos/
 test-tokens/
+
+
+# Terraform files to ignore
+*.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.tfstate.lock.info
+plan.out
