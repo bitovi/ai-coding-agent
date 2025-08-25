@@ -1,15 +1,5 @@
 import nodemailer, { Transporter } from 'nodemailer';
-
-interface EmailConfig {
-  host: string;
-  port: number;
-  secure: boolean;
-  auth: {
-    user?: string;
-    pass?: string;
-  };
-}
-
+import nodemailerSendgrid from 'nodemailer-sendgrid';
 interface EmailTestResult {
   success: boolean;
   message: string;
@@ -26,26 +16,19 @@ export class EmailProvider {
   }
 
   private setupTransporter(): void {
-    // Use environment variables for email configuration
-    const emailConfig: EmailConfig = {
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.EMAIL_PORT || '587'),
-      secure: process.env.EMAIL_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    };
+    const apiKey = process.env.SENDGRID_API_KEY;
 
     // If no email configuration, create a test account for development
-    if (!emailConfig.auth.user || !emailConfig.auth.pass) {
+    if (!apiKey) {
       console.warn('⚠️  No email configuration found. Email notifications will be logged to console.');
       this.transporter = null;
       return;
     }
 
     try {
-      this.transporter = nodemailer.createTransporter(emailConfig);
+      this.transporter = nodemailer.createTransport(
+        nodemailerSendgrid({ apiKey })
+      );
       console.log('✅ Email service configured');
     } catch (error) {
       console.error('❌ Failed to setup email service:', error);
@@ -267,7 +250,7 @@ Your AI Coding Agent
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Email sent successfully:', result.messageId);
+      console.log('✅ Email sent successfully:', result[0].statusMessage);
       return result;
     } catch (error) {
       console.error('❌ Failed to send email:', error);
