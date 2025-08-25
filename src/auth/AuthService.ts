@@ -40,7 +40,7 @@ export class AuthService {
    * Parse authorized emails from environment variable
    */
   private parseAuthorizedEmails(): string[] {
-    const emails = process.env.AUTHORIZED_EMAILS || process.env.EMAIL || '';
+    const emails = process.env.AUTHORIZED_EMAILS || '';
     return emails
       .split(',')
       .map(email => email.trim().toLowerCase())

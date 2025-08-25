@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
       mountPoints = [
         {
           sourceVolume  = "${var.app_name}-${var.target_environment}-efs-volume"
-          containerPath = "/token"
+          containerPath = "/tokens"
         }
       ]
 

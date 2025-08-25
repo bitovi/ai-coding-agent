@@ -16,7 +16,13 @@ export class AuthService {
    * Parse authorized emails from environment variable
    */
   parseAuthorizedEmails() {
-    const emails = process.env.AUTHORIZED_EMAILS || process.env.EMAIL || '';
+    const emails = process.env.AUTHORIZED_EMAILS || '';
+
+    if (emails.length === 0) {
+      // If no authorized emails configured, allow any email (development mode)
+      console.warn('⚠️  No AUTHORIZED_EMAILS configured - allowing all email addresses');
+    }
+
     return emails
       .split(',')
       .map(email => email.trim().toLowerCase())
@@ -28,8 +34,6 @@ export class AuthService {
    */
   isEmailAuthorized(email) {
     if (this.authorizedEmails.length === 0) {
-      // If no authorized emails configured, allow any email (development mode)
-      console.warn('⚠️  No AUTHORIZED_EMAILS configured - allowing all email addresses');
       return true;
     }
 
