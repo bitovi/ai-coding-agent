@@ -18,9 +18,6 @@ export class AuthService {
   parseAuthorizedEmails() {
     const emails = process.env.AUTHORIZED_EMAILS || '';
 
-    console.warn(`testing: ${emails}`);
-    console.warn(`testing: ${emails.length}`);
-    
     if (emails.length === 0) {
       // If no authorized emails configured, allow any email (development mode)
       console.warn('⚠️  No AUTHORIZED_EMAILS configured - allowing all email addresses');
