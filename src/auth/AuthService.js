@@ -16,11 +16,12 @@ export class AuthService {
    * Parse authorized emails from environment variable
    */
   parseAuthorizedEmails() {
-    const emails = process.env.AUTHORIZED_EMAILS || process.env.EMAIL || '';
+    const emails = process.env.AUTHORIZED_EMAILS || '';
 
     console.warn(`testing: ${emails}`);
+    console.warn(`testing: ${emails.length}`);
     
-    if (this.authorizedEmails.length === 0) {
+    if (emails.length === 0) {
       // If no authorized emails configured, allow any email (development mode)
       console.warn('⚠️  No AUTHORIZED_EMAILS configured - allowing all email addresses');
     }
