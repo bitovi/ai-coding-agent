@@ -17,3 +17,7 @@ output "alb_dns_name" {
 output "task_definition_arn" {
     value = aws_ecs_task_definition.ai_coding_agent_td.arn
 }
+
+output "fqdn" {
+    value = aws_route53_record.app.fqdn
+}

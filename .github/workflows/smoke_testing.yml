@@ -99,11 +99,43 @@ jobs:
           [ $SECONDS -gt $deadline ] && echo "Timed out waiting for healthy targets" && exit 1
           sleep 5
           done
+      
+      - name: Generate an output
+        id: get-fqdn
+        run: |
+          url=$(terraform output -raw fqdn)
+          echo "fqdn=$url" >> $GITHUB_OUTPUT
 
       - name: App health check via ALB
         run: |
           url=$(terraform output -raw alb_dns_name)
-          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/health" 
+          curl -fsS --retry 30 --retry-connrefused --retry-delay 2 "http://$url/health"
+      
+      - uses: chrnorm/deployment-action@v2
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ steps.get-fqdn.outputs.fqdn }}"
+          environment: ${{ inputs.environment_tag }}
+      
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ steps.get-fqdn.outputs.fqdn }}"
+          state: 'success'
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ steps.get-fqdn.outputs.fqdn }}"
+          state: 'failure'
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
 
 
   slackNotificationSuccess:
