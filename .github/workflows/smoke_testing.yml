@@ -118,6 +118,14 @@ jobs:
                 text:
                   type: "mrkdwn"
                   text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ inputs.fqdn }}"
+          state: 'success'
+          deployment-id: ${{ inputs.deployment_id }}
 
   slackNotificationFailure:
     name: Slack Notification (Failure)
@@ -140,3 +148,11 @@ jobs:
                 text:
                   type: "mrkdwn"
                   text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ inputs.fqdn }}"
+          state: 'failure'
+          deployment-id: ${{ inputs.deployment_id }}

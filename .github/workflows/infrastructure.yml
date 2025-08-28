@@ -29,10 +29,10 @@ on:
     outputs:
       fqdn:
         description: The fully qualified domain name of the deployed service
-        value: ${{ jobs.deploy.steps.outputs.fqdn }}
+        value: ${{ jobs.deploy.outputs.fqdn }}
       deployment_id:
         description: The GitHub deployment ID
-        value: ${{ jobs.deploy.steps.outputs.deployment_id }}
+        value: ${{ jobs.deploy.outputs.deployment_id }}
 
 env:
   AWS_REGION: us-east-2
