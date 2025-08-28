@@ -26,6 +26,13 @@ on:
       enable_execute_command:
         type: boolean
         default: false
+    outputs:
+      fqdn:
+        description: The fully qualified domain name of the deployed service
+        value: ${{ jobs.deploy.steps.outputs.fqdn }}
+      deployment_id:
+        description: The GitHub deployment ID
+        value: ${{ jobs.deploy.steps.outputs.deployment_id }}
 
 env:
   AWS_REGION: us-east-2
@@ -35,9 +42,13 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_tag }}
     defaults:
       run:
         working-directory: ${{ github.workspace }}/infra
+    outputs:
+      fqdn: ${{ steps.get-fqdn.outputs.fqdn }}
+      deployment_id: ${{ steps.deployment.outputs.deployment_id }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -52,14 +63,51 @@ jobs:
       
       - run: terraform init -backend-config="key=${{ inputs.s3_key }}"
 
+      - name: Create .env file for terraform
+        run: |
+          echo "EMAIL=${{ vars.EMAIL }}" >> .env
+          echo "CLAUDE_SERVICE=${{ vars.CLAUDE_SERVICE }}" >> .env
+          echo "CLAUDE_CODE_TIMEOUT_MS=${{ vars.CLAUDE_CODE_TIMEOUT_MS }}" >> .env
+          echo "BASE_URL=${{ vars.BASE_URL }}" >> .env
+          echo "PORT=${{ vars.PORT }}" >> .env
+          echo "DISABLE_AUTH=${{ vars.DISABLE_AUTH }}" >> .env
+          echo "MCP_SERVERS=${{ vars.MCP_SERVERS }}" >> .env
+          echo "PROMPTS=${{ vars.PROMPTS }}" >> .env
+          echo "WORKING_DIR=${{ vars.WORKING_DIR }}" >> .env
+          echo "GIT_HOME_DIR=${{ vars.GIT_HOME_DIR }}" >> .env
+          echo "GIT_AUTHOR_NAME=${{ vars.GIT_AUTHOR_NAME }}" >> .env
+          echo "GIT_AUTHOR_EMAIL=${{ vars.GIT_AUTHOR_EMAIL }}" >> .env
+          echo "GIT_USERNAME=${{ vars.GIT_USERNAME }}" >> .env
+          echo "EMAIL_FROM=${{ vars.EMAIL_FROM }}" >> .env
+          echo "OAUTH_REDIRECT_URI=${{ vars.OAUTH_REDIRECT_URI }}" >> .env
+          echo "TOKENS_PATH=${{ vars.TOKENS_PATH }}" >> .env
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
+          echo "ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}" >> .env
+          echo "GIT_TOKEN=${{ secrets.GIT_TOKEN }}" >> .env
+          echo "SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}" >> .env
+          echo "TOKENS_ENCRYPTION_KEY=${{ secrets.TOKENS_ENCRYPTION_KEY }}" >> .env
+
       - id: plan
         run: |
           terraform plan -no-color ${{ inputs.tf_vars_files }} \
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}" \
-            -var "env_file_arn=arn:aws:s3:::ai-coding-agent/env_files/${{ inputs.environment_tag }}/.env"
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
+        
+      - name: Generate an output
+        id: get-fqdn
+        run: |
+          url=$(terraform output -raw fqdn)
+          echo "fqdn=$url" >> $GITHUB_OUTPUT
+      
+      - uses: chrnorm/deployment-action@v2
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ steps.get-fqdn.outputs.fqdn }}"
+          environment: ${{ inputs.environment_tag }}
 
       - name: Terraform Apply
         run: |
@@ -67,8 +115,7 @@ jobs:
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}" \
-            -var "env_file_arn=arn:aws:s3:::ai-coding-agent/env_files/${{ inputs.environment_tag }}/.env"
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
   slackNotificationSuccess:
     name: Slack Notification (Success)

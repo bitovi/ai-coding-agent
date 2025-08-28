@@ -6,8 +6,8 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
   family = "ai-coding-agent-tdf"
   requires_compatibilities = ["FARGATE"]
   network_mode = "awsvpc"
-  cpu       = 1024
-  memory    = 2048
+  cpu       = var.cpu_request
+  memory    = var.mem_request
   execution_role_arn = aws_iam_role.tdf_execution_role.arn
   task_role_arn = aws_iam_role.tdf_task_role.arn
 
@@ -15,7 +15,6 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
     name = "${var.app_name}-${var.target_environment}-efs-volume"
     efs_volume_configuration {
       file_system_id = aws_efs_file_system.efs_file_system.id
-      # root_directory = "/tokens"
     }
   }
   
@@ -40,6 +39,13 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
           hostPort      = 3000
         }
       ]
+
+      entryPoint = [
+        "sh",
+        "-c",
+        "chown -R appuser:appgroup /tokens && chmod -R 755 /tokens && exec /usr/local/bin/setup-git-credentials.sh npm start"
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -48,10 +54,10 @@ resource "aws_ecs_task_definition" "ai_coding_agent_td" {
           "awslogs-stream-prefix" = var.target_environment
         }
       },
-      "environmentFiles": [
+      environmentFiles = [
         {
-          "value": var.env_file_arn,
-          "type": "s3"
+          value: aws_s3_object.env_file.arn,
+          type: "s3"
         }
       ],
     },
