@@ -8,3 +8,4 @@ container_port = 3000
 hosted_zone_id = "Z088938213M784NAAX7NY"
 ecs_name = "ai-enablement-cluster"
 acm_certificate_arn = "arn:aws:acm:us-east-2:767397775295:certificate/c90a939f-9e92-4556-98a4-09b0f9df430b"
+s3_bucket_name = "ai-coding-agent"

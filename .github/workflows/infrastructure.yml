@@ -35,6 +35,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_tag }}
     defaults:
       run:
         working-directory: ${{ github.workspace }}/infra
@@ -52,14 +53,20 @@ jobs:
       
       - run: terraform init -backend-config="key=${{ inputs.s3_key }}"
 
+      - name: Create .env file for terraform
+        env:
+          TEST2: ${{ vars.TEST }}
+        run: |
+          echo "Test 1: ${{ vars.TEST }}"
+          echo "Test 2: ${{ env.TEST2 }}"
+
       - id: plan
         run: |
           terraform plan -no-color ${{ inputs.tf_vars_files }} \
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}" \
-            -var "env_file_arn=arn:aws:s3:::ai-coding-agent/env_files/${{ inputs.environment_tag }}/.env"
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
       - name: Terraform Apply
         run: |
@@ -67,8 +74,7 @@ jobs:
             -var "image_tag=${{ inputs.image_tag }}" \
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}" \
-            -var "enable_execute_command=${{ inputs.enable_execute_command }}" \
-            -var "env_file_arn=arn:aws:s3:::ai-coding-agent/env_files/${{ inputs.environment_tag }}/.env"
+            -var "enable_execute_command=${{ inputs.enable_execute_command }}"
 
   slackNotificationSuccess:
     name: Slack Notification (Success)

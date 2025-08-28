@@ -13,11 +13,6 @@ variable "s3_arn" {
     type        = string
 }
 
-variable env_file_arn {
-    description = "Image tag used"
-    type        = string
-}
-
 variable log_retention_period {
     description = "Number of days for task definition log retention"
     type        = number
@@ -93,4 +88,9 @@ variable ecs_name {
 variable "acm_certificate_arn" {
   type        = string
   description = "ARN of the issued ACM certificate in the same region as the ALB"
+}
+
+variable "s3_bucket_name" {
+  type        = string
+  description = "Name of the S3 bucket"
 }
