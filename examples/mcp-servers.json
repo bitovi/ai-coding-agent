@@ -1,8 +1,8 @@
 [
   {
-    "name": "jira",
+    "name": "bitovi-jira",
     "type": "url",
-    "url": "https://mcp.atlassian.com/v1/sse",
+    "url": "https://jira-mcp-auth-bridge-staging.bitovi.com/mcp",
     "authorization_token": null,
     "proxy": true,
     "tool_configuration": {
