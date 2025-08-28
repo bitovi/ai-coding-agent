@@ -61,4 +61,6 @@ jobs:
     with:
       s3_key: "terraform/staging.tfstate"
       environment_tag: production
+      fqdn: ${{ needs.update-infrastructure.outputs.fqdn }}
+      deployment_id: ${{ needs.update-infrastructure.outputs.deployment_id }}
     secrets: inherit

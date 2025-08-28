@@ -26,6 +26,13 @@ on:
       enable_execute_command:
         type: boolean
         default: false
+    outputs:
+      fqdn:
+        description: The fully qualified domain name of the deployed service
+        value: ${{ jobs.deploy.steps.outputs.fqdn }}
+      deployment_id:
+        description: The GitHub deployment ID
+        value: ${{ jobs.deploy.steps.outputs.deployment_id }}
 
 env:
   AWS_REGION: us-east-2
@@ -39,6 +46,9 @@ jobs:
     defaults:
       run:
         working-directory: ${{ github.workspace }}/infra
+    outputs:
+      fqdn: ${{ steps.get-fqdn.outputs.fqdn }}
+      deployment_id: ${{ steps.deployment.outputs.deployment_id }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -84,6 +94,20 @@ jobs:
             -var "domain_name=${{ inputs.domain_name }}" \
             -var "target_environment=${{ inputs.environment_tag }}" \
             -var "enable_execute_command=${{ inputs.enable_execute_command }}"
+        
+      - name: Generate an output
+        id: get-fqdn
+        run: |
+          url=$(terraform output -raw fqdn)
+          echo "fqdn=$url" >> $GITHUB_OUTPUT
+      
+      - uses: chrnorm/deployment-action@v2
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ steps.get-fqdn.outputs.fqdn }}"
+          environment: ${{ inputs.environment_tag }}
 
       - name: Terraform Apply
         run: |
