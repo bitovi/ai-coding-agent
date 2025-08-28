@@ -44,8 +44,10 @@ export interface ConnectionStatus {
   type: string;
   description: string;
   isAvailable: boolean;
+  isProxy?: boolean;
   authUrl?: string;
   setupUrl?: string;
+  proxyEndpoints?: string[];
   details?: any;
   // Legacy compatibility
   status?: 'authorized' | 'unauthorized';

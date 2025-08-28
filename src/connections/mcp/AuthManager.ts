@@ -139,7 +139,26 @@ export class AuthManager {
    * the ClaudeCodeSDK
    */
   getTokens(serviceName: string): StoredTokens | undefined {
-    return this.tokenStore.get(serviceName);
+    const tokens = this.tokenStore.get(serviceName);
+    console.log(`🔑 [AUTH-MANAGER] getTokens called for service: ${serviceName}`);
+    console.log(`🔑 [AUTH-MANAGER] Found tokens: ${tokens ? 'YES' : 'NO'}`);
+    
+    if (tokens) {
+      // Log token availability without exposing sensitive data
+      const now = Date.now() / 1000;
+      const isExpired = tokens.expires_at ? now > tokens.expires_at : false;
+      
+      console.log(`🔍 [AUTH-DEBUG] Token status for ${serviceName}:`, {
+        hasAccessToken: !!tokens.access_token,
+        hasRefreshToken: !!tokens.refresh_token,
+        tokenType: tokens.token_type,
+        scope: tokens.scope,
+        isExpired: isExpired,
+        expiresIn: tokens.expires_at ? Math.round(tokens.expires_at - now) : null
+      });
+    }
+    
+    return tokens;
   }
 
   /**
