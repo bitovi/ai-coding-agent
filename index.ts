@@ -188,7 +188,7 @@ class AICodingAgent {
 
     this.app.get('/auth/login', async (req, res) => {
       try {
-        console.log('🔐 /auth/login route hit with token:', req.query.token);
+        console.log('🔐 /auth/login route hit with token:', req.query.token ? 'YES' : 'NO');
         const { token } = req.query;
         
         if (!token) {

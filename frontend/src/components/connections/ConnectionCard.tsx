@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import type { ConnectionStatus } from '@/services/api';
 import { useAuthorizeService, useSetupCredentials } from '@/hooks/api';
-import { CheckCircle, XCircle, Lock, Wifi } from 'lucide-react';
+import { CheckCircle, XCircle, Lock, Wifi, ArrowRightLeft } from 'lucide-react';
 
 interface ConnectionCardProps {
   connection: ConnectionStatus;
@@ -88,12 +88,18 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
             {connection.url && (
               <span className="block"><strong>URL:</strong> {connection.url}</span>
             )}
+            {connection.isProxy && (
+              <span className="block text-blue-600 font-medium">
+                <ArrowRightLeft className="inline h-3 w-3 mr-1" />
+                Proxied Connection
+              </span>
+            )}
           </span>
         </CardDescription>
       </CardHeader>
       
       <CardContent className="flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-2">
           {getStatusIcon()}
           <Badge 
             variant={isAuthorized ? 'default' : 'destructive'}
@@ -102,6 +108,17 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
             {isAuthorized ? 'Authorized' : 'Not Authorized'}
           </Badge>
         </div>
+        {connection.isProxy && (
+          <div className="flex items-center gap-2">
+            <Badge 
+              variant="secondary"
+              className="pointer-events-none text-blue-600 border-blue-200 bg-blue-50"
+            >
+              <ArrowRightLeft className="h-3 w-3 mr-1" />
+              Proxied
+            </Badge>
+          </div>
+        )}
       </CardContent>
       
       <CardFooter>
