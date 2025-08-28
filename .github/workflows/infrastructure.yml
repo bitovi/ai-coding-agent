@@ -168,3 +168,12 @@ jobs:
                 text:
                   type: "mrkdwn"
                   text: "> Check the logs for <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|details>."
+      
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: "https://${{ needs.deploy.outputs.fqdn }}"
+          state: 'failure'
+          deployment-id: ${{ needs.deploy.outputs.deployment_id }} 
