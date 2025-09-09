@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { PromptActivity } from '@/components/prompts/PromptActivity';
+import { TaskFlow } from '@/components/taskflow/TaskFlow';
 import { Login } from '@/components/auth/Login';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 
@@ -25,6 +26,14 @@ function App() {
             element={
               <AuthGuard fallback={<Login />}>
                 <Dashboard />
+              </AuthGuard>
+            } 
+          />
+          <Route 
+            path="/taskflow" 
+            element={
+              <AuthGuard fallback={<Login />}>
+                <TaskFlow />
               </AuthGuard>
             } 
           />
