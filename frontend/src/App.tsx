@@ -4,6 +4,7 @@ import { Dashboard } from '@/components/dashboard/Dashboard';
 import { PromptActivity } from '@/components/prompts/PromptActivity';
 import { Login } from '@/components/auth/Login';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { TaskFlowDemo } from '@/components/taskflow/TaskFlowDemo';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/demo" element={<TaskFlowDemo />} />
           <Route 
             path="/" 
             element={
