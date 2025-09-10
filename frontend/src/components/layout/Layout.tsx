@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLogout } from '@/hooks/useAuth';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Home, Workflow } from 'lucide-react';
+import { useLocation, Link } from 'react-router-dom';
 
 interface HeaderProps {
   user?: { email: string } | null;
@@ -10,10 +11,13 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const logout = useLogout();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
   };
+
+  const isActive = (path: string) => location.pathname === path;
 
   return (
     <Card className="mb-8">
@@ -45,6 +49,30 @@ export function Header({ user }: HeaderProps) {
               </Button>
             </div>
           )}
+        </div>
+        
+        {/* Navigation */}
+        <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t">
+          <Link to="/">
+            <Button 
+              variant={isActive('/') ? 'default' : 'ghost'}
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Home className="h-4 w-4" />
+              Dashboard
+            </Button>
+          </Link>
+          <Link to="/taskflow">
+            <Button 
+              variant={isActive('/taskflow') ? 'default' : 'ghost'}
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Workflow className="h-4 w-4" />
+              TaskFlow
+            </Button>
+          </Link>
         </div>
       </CardHeader>
     </Card>
