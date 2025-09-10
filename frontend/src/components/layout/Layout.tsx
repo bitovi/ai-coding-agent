@@ -1,8 +1,46 @@
 import type { ReactNode } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLogout } from '@/hooks/useAuth';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Home, TestTube } from 'lucide-react';
+
+interface NavigationProps {
+  currentPath: string;
+}
+
+export function Navigation({ currentPath }: NavigationProps) {
+  const navItems = [
+    { path: '/', label: 'Dashboard', icon: Home },
+    { path: '/tests', label: 'Tests', icon: TestTube },
+  ];
+
+  return (
+    <Card className="mb-6">
+      <div className="p-4">
+        <nav className="flex gap-2">
+          {navItems.map(({ path, label, icon: Icon }) => {
+            const isActive = currentPath === path;
+            return (
+              <Button
+                key={path}
+                asChild
+                variant={isActive ? 'default' : 'ghost'}
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Link to={path}>
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </Link>
+              </Button>
+            );
+          })}
+        </nav>
+      </div>
+    </Card>
+  );
+}
 
 interface HeaderProps {
   user?: { email: string } | null;
@@ -57,10 +95,13 @@ interface LayoutProps {
 }
 
 export function Layout({ children, user }: LayoutProps) {
+  const location = useLocation();
+  
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <Header user={user} />
+        <Navigation currentPath={location.pathname} />
         {children}
       </div>
     </div>

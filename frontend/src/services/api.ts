@@ -80,6 +80,36 @@ export interface User {
   email: string;
 }
 
+// Test interfaces
+export interface TestResult {
+  success: boolean;
+  message: string;
+  details?: any;
+  timestamp: string;
+}
+
+export interface ConnectionTestResult extends TestResult {
+  connectionName: string;
+  connectionType: string;
+  hasAuth: boolean;
+  authMethod?: string;
+}
+
+export interface ConfigValidationResult extends TestResult {
+  category: string;
+  items: Array<{
+    name: string;
+    status: 'success' | 'warning' | 'error';
+    message: string;
+  }>;
+}
+
+export interface SystemTestResult {
+  overall: TestResult;
+  connections: ConnectionTestResult[];
+  configuration: ConfigValidationResult[];
+}
+
 // Generic API function
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -215,5 +245,24 @@ export const webClientServices = {
     await apiRequest('/auth/logout', {
       method: 'POST',
     });
+  },
+
+  // Tests
+  async getSystemTests(): Promise<SystemTestResult> {
+    const response = await apiRequest('/api/tests/system');
+    const data = await response.json();
+    return data.data;
+  },
+
+  async getConnectionTests(): Promise<ConnectionTestResult[]> {
+    const response = await apiRequest('/api/tests/connections');
+    const data = await response.json();
+    return data.data;
+  },
+
+  async getConfigValidation(): Promise<ConfigValidationResult[]> {
+    const response = await apiRequest('/api/tests/configuration');
+    const data = await response.json();
+    return data.data;
   },
 };
