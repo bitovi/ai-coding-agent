@@ -21,7 +21,7 @@
   },
   {
     "name": "create-jira-issue",
-    "mcp_servers": ["jira"],
+    "mcp_servers": ["bitovi-jira"],
     "messages": [
       {
         "role": "user",
@@ -119,7 +119,7 @@
   },
   {
     "name": "project-status-report",
-    "mcp_servers": ["jira", "github"],
+    "mcp_servers": ["bitovi-jira", "github"],
     "messages": [
       {
         "role": "user",
@@ -145,7 +145,7 @@
   {
     "name": "create-commit-and-push",
     "connections": { "claude_code": ["git-credentials"] },
-    "mcp_servers": ["jira", "figma"],
+    "mcp_servers": ["bitovi-jira", "figma"],
     "messages": [
       {
         "role": "user",
