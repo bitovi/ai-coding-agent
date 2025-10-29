@@ -1,4 +1,4 @@
-import { SessionManager, Session, SessionStats, MagicLinkStats } from './SessionManager';
+import { SessionManager, Session, SessionStats, MagicLinkStats } from './SessionManager.js';
 
 interface EmailService {
   sendMagicLoginEmail(email: string, token: string): Promise<void>;

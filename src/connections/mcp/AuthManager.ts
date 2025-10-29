@@ -1,8 +1,33 @@
-import { Issuer, generators, Client, TokenSet } from 'openid-client';
+import { Issuer, generators, Client, TokenSet, custom } from 'openid-client';
 import { Request, Response } from 'express';
-import fetch from 'node-fetch';
 import { URL } from 'url';
 import { EncryptedTokensFolderProvider } from '../../providers/EncryptedTokensFolderProvider.js';
+import { mcpTrafficLogger } from '../../utils/mcp-traffic-logger.js';
+
+// Get Claude Code version from the @anthropic-ai/claude-code dependency
+function getClaudeCodeUserAgent(): string {
+  try {
+    // Use the same User-Agent format as Claude Code
+    return 'claude-code/1.0.72';
+  } catch (error) {
+    // Fallback if we can't get version
+    return 'claude-code/1.0.0';
+  }
+}
+
+// Configure openid-client globally with Claude Code User-Agent immediately after import
+const claudeCodeUserAgent = getClaudeCodeUserAgent();
+console.log(`🔧 [MODULE] Setting global User-Agent for openid-client: ${claudeCodeUserAgent}`);
+
+// Configure openid-client with Claude Code User-Agent
+custom.setHttpOptionsDefaults({
+  headers: {
+    'User-Agent': claudeCodeUserAgent
+  },
+  timeout: 30000
+});
+
+console.log(`✅ [MODULE] openid-client configured with User-Agent: ${claudeCodeUserAgent}`);
 
 interface MCPServer {
   name: string;
@@ -89,6 +114,8 @@ export class AuthManager {
     this.authSessions = new Map<string, AuthSession>(); // Maps session ID to auth session data (always in-memory)
     this.refreshPromises = new Map<string, Promise<boolean>>(); // Track ongoing refresh operations to prevent duplicates
     this.defaultRedirectUri = process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/oauth/callback';
+
+    console.log(`🔧 AuthManager initialized with User-Agent: ${claudeCodeUserAgent}`);
   }
 
   /**
@@ -350,6 +377,25 @@ export class AuthManager {
 
     console.log(`🔄 Refreshing tokens for ${serviceName}...`);
 
+    // Generate request ID for tracking
+    const requestId = `auth-refresh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Log the token refresh request with FULL sensitive data for debugging
+    await mcpTrafficLogger.logRequest(serviceName, {
+      method: 'POST',
+      url: tokenEndpoint,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: {
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token, // FULL refresh token for debugging
+        client_id: clientId
+      },
+      isStreaming: false
+    }, requestId);
+
     try {
       const refreshResponse = await fetch(tokenEndpoint, {
         method: 'POST',
@@ -364,12 +410,48 @@ export class AuthManager {
         })
       });
 
+      // Log the response
+      await mcpTrafficLogger.logResponse(requestId, serviceName, {
+        status: refreshResponse.status,
+        statusText: refreshResponse.statusText,
+        headers: Object.fromEntries(refreshResponse.headers.entries()),
+        isStreaming: false,
+        contentType: refreshResponse.headers.get('content-type') || undefined
+      });
+
       if (!refreshResponse.ok) {
         const errorText = await refreshResponse.text();
+        
+        // Log the error response body
+        await mcpTrafficLogger.logResponse(requestId, serviceName, {
+          status: refreshResponse.status,
+          statusText: refreshResponse.statusText,
+          headers: Object.fromEntries(refreshResponse.headers.entries()),
+          body: { error: errorText },
+          isStreaming: false,
+          contentType: refreshResponse.headers.get('content-type') || undefined
+        });
+        
         throw new Error(`Token refresh failed: ${refreshResponse.status} ${refreshResponse.statusText} - ${errorText}`);
       }
 
       const newTokens = await refreshResponse.json() as Partial<StoredTokens>;
+      
+      // Log successful response body with FULL sensitive tokens for debugging
+      await mcpTrafficLogger.logResponse(requestId, serviceName, {
+        status: refreshResponse.status,
+        statusText: refreshResponse.statusText,
+        headers: Object.fromEntries(refreshResponse.headers.entries()),
+        body: {
+          access_token: newTokens.access_token, // FULL access token for debugging
+          refresh_token: newTokens.refresh_token, // FULL refresh token for debugging
+          tokenType: newTokens.token_type,
+          scope: newTokens.scope,
+          expiresIn: newTokens.expires_in
+        },
+        isStreaming: false,
+        contentType: refreshResponse.headers.get('content-type') || undefined
+      });
       
       // Preserve metadata from original tokens and merge with new tokens
       const updatedTokens: StoredTokens = {
@@ -396,6 +478,18 @@ export class AuthManager {
       
     } catch (error: any) {
       console.error(`❌ Token refresh failed for ${serviceName}:`, error.message);
+      
+      // Log the error
+      await mcpTrafficLogger.logError(requestId, serviceName, {
+        error: 'TOKEN_REFRESH_ERROR',
+        message: `Token refresh failed: ${error.message}`,
+        stack: error.stack,
+        context: {
+          tokenEndpoint,
+          clientId,
+          hasRefreshToken: !!tokens.refresh_token
+        }
+      });
       
       // If refresh failed, the refresh token might be invalid/expired
       // Remove the tokens so user can re-authorize
@@ -513,40 +607,110 @@ export class AuthManager {
   private async _initiateOAuthWithDiscovery(mcpServer: MCPServer, sessionId: string): Promise<string> {
     const discoveryUrl = await this._getAuthorizationServerDiscoveryUrl(mcpServer.url!);
     
+    console.log(`🔍 [OAUTH] Discovering OAuth issuer at: ${discoveryUrl}`);
+    
     // Discover the OAuth issuer
     const issuer = await Issuer.discover(discoveryUrl);
     
-    // Dynamic client registration
-    const client = await (issuer.Client as any).register({
-      client_name: 'AI Coding Agent MCP Client',
-      redirect_uris: [this.defaultRedirectUri],
-      grant_types: ['authorization_code'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none' // public client
+    console.log(`✅ [OAUTH] Discovered issuer:`, {
+      issuer: issuer.issuer,
+      registration_endpoint: issuer.registration_endpoint,
+      authorization_endpoint: issuer.authorization_endpoint,
+      token_endpoint: issuer.token_endpoint,
+      scopes_supported: issuer.scopes_supported
     });
+    
+    // Log the User-Agent we're about to use
+    console.log(`🔧 [OAUTH] About to register client with User-Agent: ${claudeCodeUserAgent}`);
+    
+    // Dynamic client registration - manual implementation to handle Figma's 200 OK response
+    console.log(`🔄 [OAUTH] Starting dynamic client registration...`);
+    
+    try {
+      const registrationEndpoint = issuer.registration_endpoint as string;
+      if (!registrationEndpoint) {
+        throw new Error('No registration endpoint found in issuer metadata');
+      }
 
-    // Generate PKCE parameters
-    const codeVerifier = generators.codeVerifier();
-    const codeChallenge = generators.codeChallenge(codeVerifier);
+      // Manual registration to handle Figma returning 200 OK instead of 201 Created
+      const registrationResponse = await fetch(registrationEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': claudeCodeUserAgent
+        },
+        body: JSON.stringify({
+          client_name: 'Claude Code MCP Client',
+          redirect_uris: [this.defaultRedirectUri],
+          grant_types: ['authorization_code'],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'none'
+        })
+      });
 
-    // Store session data
-    this.authSessions.set(sessionId, {
-      mcpServerName: mcpServer.name,
-      client,
-      codeVerifier,
-      timestamp: Date.now()
-    });
+      if (!registrationResponse.ok) {
+        const errorText = await registrationResponse.text();
+        throw new Error(`Registration failed: ${registrationResponse.status} ${registrationResponse.statusText} - ${errorText}`);
+      }
 
-    // Generate authorization URL
-    const authUrl = client.authorizationUrl({
-      scope: 'read:jira-work', // Match the working example scope
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      redirect_uri: this.defaultRedirectUri,
-      state: sessionId
-    });
+      const clientData = await registrationResponse.json();
+      
+      console.log('🔍 [DEBUG] Full client registration response:', JSON.stringify(clientData, null, 2));
+      
+      // Standard PKCE flow: ignore client_secret even if provided, use token_endpoint_auth_method: "none"
+      const client = new issuer.Client({
+        client_id: clientData.client_id,
+        // Explicitly DO NOT include client_secret for PKCE public client
+        redirect_uris: clientData.redirect_uris || [this.defaultRedirectUri],
+        response_types: clientData.response_types || ['code'],
+        // Trust the server's response about auth method
+        token_endpoint_auth_method: clientData.token_endpoint_auth_method || 'none'
+      });
+      
+      console.log(`✅ [OAUTH] Client registration successful:`, {
+        client_id: client.client_id,
+        redirect_uris: client.redirect_uris
+      });
+      
+      // Generate PKCE parameters
+      const codeVerifier = generators.codeVerifier();
+      const codeChallenge = generators.codeChallenge(codeVerifier);
 
-    return authUrl;
+      // Store session data
+      this.authSessions.set(sessionId, {
+        mcpServerName: mcpServer.name,
+        client,
+        codeVerifier,
+        timestamp: Date.now()
+      });
+
+      // Generate authorization URL with discovered scopes
+      const supportedScopes = issuer.scopes_supported as string[] || [];
+      const requestedScope = supportedScopes.length > 0 ? supportedScopes.join(' ') : 'openid';
+      
+      console.log(`🔧 [OAUTH] Using scopes: ${requestedScope} (from discovery: ${supportedScopes.join(', ') || 'none'})`);
+      
+      const authUrl = client.authorizationUrl({
+        scope: requestedScope,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        redirect_uri: this.defaultRedirectUri,
+        state: sessionId
+      });
+
+      console.log(`🔗 [OAUTH] Generated authorization URL: ${authUrl}`);
+      return authUrl;
+      
+    } catch (error: any) {
+      console.error(`❌ [OAUTH] Client registration failed:`, {
+        error: error.message,
+        stack: error.stack,
+        discoveryUrl,
+        userAgent: claudeCodeUserAgent
+      });
+      throw error;
+    }
   }
 
   /**
@@ -555,61 +719,179 @@ export class AuthManager {
    */
   private async _getAuthorizationServerDiscoveryUrl(mcpUrl: string): Promise<string> {
     // First, try to get the metadata URL from WWW-Authenticate header (RFC9728)
+    const discoveryRequestId = `auth-discovery-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
+      // Log the discovery request
+      await mcpTrafficLogger.logRequest('oauth-discovery', {
+        method: 'GET',
+        url: mcpUrl,
+        headers: {},
+        isStreaming: false
+      }, discoveryRequestId);
+      
       const res = await fetch(mcpUrl, { method: 'GET' });
+      
+      // Log the discovery response
+      await mcpTrafficLogger.logResponse(discoveryRequestId, 'oauth-discovery', {
+        status: res.status,
+        statusText: res.statusText,
+        headers: Object.fromEntries(res.headers.entries()),
+        isStreaming: false,
+        contentType: res.headers.get('content-type') || undefined
+      });
+      
       const wwwAuth = res.headers.get('www-authenticate');
       
       if (wwwAuth) {
         const resourceMatch = wwwAuth.match(/resource="([^"]+)"/);
         if (resourceMatch) {
           console.log('✅ Found resource metadata URL in WWW-Authenticate header');
+          
+          await mcpTrafficLogger.logCustomEvent(discoveryRequestId, 'oauth-discovery', 'WWW_AUTHENTICATE_SUCCESS', {
+            resourceUrl: resourceMatch[1],
+            wwwAuthHeader: wwwAuth
+          });
+          
           return resourceMatch[1];
         }
       }
     } catch (error: any) {
       console.log('⚠️  Could not get resource metadata from WWW-Authenticate header:', error.message);
+      
+      await mcpTrafficLogger.logError(discoveryRequestId, 'oauth-discovery', {
+        error: 'WWW_AUTHENTICATE_DISCOVERY_ERROR',
+        message: `Could not get resource metadata from WWW-Authenticate header: ${error.message}`,
+        stack: error.stack,
+        context: { mcpUrl }
+      });
     }
     
     // Fallback: Try the standard OAuth Authorization Server Metadata endpoint
     const mcpUrlObj = new URL(mcpUrl);
     const authServerMetadataUrl = `${mcpUrlObj.protocol}//${mcpUrlObj.host}/.well-known/oauth-authorization-server`;
     
+    const metadataRequestId = `auth-metadata-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
+      await mcpTrafficLogger.logRequest('oauth-discovery', {
+        method: 'GET',
+        url: authServerMetadataUrl,
+        headers: {},
+        isStreaming: false
+      }, metadataRequestId);
+      
       const res = await fetch(authServerMetadataUrl);
+      
+      await mcpTrafficLogger.logResponse(metadataRequestId, 'oauth-discovery', {
+        status: res.status,
+        statusText: res.statusText,
+        headers: Object.fromEntries(res.headers.entries()),
+        isStreaming: false,
+        contentType: res.headers.get('content-type') || undefined
+      });
+      
       if (res.ok) {
         console.log('✅ Found OAuth Authorization Server Metadata endpoint');
+        
+        await mcpTrafficLogger.logCustomEvent(metadataRequestId, 'oauth-discovery', 'OAUTH_METADATA_SUCCESS', {
+          discoveryUrl: authServerMetadataUrl
+        });
+        
         return authServerMetadataUrl;
       }
-    } catch (error) {
-      // Continue to other fallbacks
+    } catch (error: any) {
+      await mcpTrafficLogger.logError(metadataRequestId, 'oauth-discovery', {
+        error: 'OAUTH_METADATA_DISCOVERY_ERROR',
+        message: `Could not fetch OAuth metadata: ${error.message}`,
+        stack: error.stack,
+        context: { authServerMetadataUrl }
+      });
     }
     
     // Additional fallback: Try OpenID Connect Discovery
     const oidcDiscoveryUrl = `${mcpUrlObj.protocol}//${mcpUrlObj.host}/.well-known/openid-configuration`;
     
+    const oidcRequestId = `auth-oidc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
+      await mcpTrafficLogger.logRequest('oauth-discovery', {
+        method: 'GET',
+        url: oidcDiscoveryUrl,
+        headers: {},
+        isStreaming: false
+      }, oidcRequestId);
+      
       const res = await fetch(oidcDiscoveryUrl);
+      
+      await mcpTrafficLogger.logResponse(oidcRequestId, 'oauth-discovery', {
+        status: res.status,
+        statusText: res.statusText,
+        headers: Object.fromEntries(res.headers.entries()),
+        isStreaming: false,
+        contentType: res.headers.get('content-type') || undefined
+      });
+      
       if (res.ok) {
         console.log('✅ Found OpenID Connect Discovery endpoint');
+        
+        await mcpTrafficLogger.logCustomEvent(oidcRequestId, 'oauth-discovery', 'OIDC_DISCOVERY_SUCCESS', {
+          discoveryUrl: oidcDiscoveryUrl
+        });
+        
         return oidcDiscoveryUrl;
       }
-    } catch (error) {
-      // Continue
+    } catch (error: any) {
+      await mcpTrafficLogger.logError(oidcRequestId, 'oauth-discovery', {
+        error: 'OIDC_DISCOVERY_ERROR',
+        message: `Could not fetch OIDC discovery: ${error.message}`,
+        stack: error.stack,
+        context: { oidcDiscoveryUrl }
+      });
     }
     
     throw new Error('Could not find OAuth Authorization Server Metadata or OpenID Connect Discovery endpoint');
   }
 
   /**
-   * Exchange authorization code for access tokens
+   * Exchange authorization code for access tokens using PKCE
    * @private
    */
   private async _exchangeCodeForTokens(session: AuthSession, code: string): Promise<StoredTokens> {
     const { client, codeVerifier } = session;
     
+    console.log('🔍 [DEBUG] Starting PKCE token exchange for client:', {
+      client_id: client.client_id,
+      has_client_secret: !!(client as any).client_secret,
+      token_endpoint_auth_method: (client as any).token_endpoint_auth_method
+    });
+    
+    // Generate request ID for tracking
+    const tokenExchangeRequestId = `auth-exchange-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
-      // Manual token exchange for pure OAuth 2.0 (following get-pkce-token.js approach)
-      console.log('🔄 Performing manual token exchange...');
+      // Pure PKCE token exchange - no client secret authentication
+      const requestBody = {
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: this.defaultRedirectUri,
+        client_id: client.client_id as string,
+        code_verifier: codeVerifier
+      };
+      
+      console.log('🔄 Making PKCE token exchange request...');
+      
+      // Log the request for debugging
+      await mcpTrafficLogger.logRequest(session.mcpServerName, {
+        method: 'POST',
+        url: client.issuer.token_endpoint as string,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        },
+        body: requestBody,
+        isStreaming: false
+      }, tokenExchangeRequestId);
       
       const tokenResponse = await fetch(client.issuer.token_endpoint as string, {
         method: 'POST',
@@ -617,23 +899,37 @@ export class AuthManager {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json'
         },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: code,
-          redirect_uri: this.defaultRedirectUri,
-          client_id: client.client_id as string,
-          code_verifier: codeVerifier
-        })
+        body: new URLSearchParams(requestBody)
+      });
+
+      // Log the response
+      await mcpTrafficLogger.logResponse(tokenExchangeRequestId, session.mcpServerName, {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        headers: Object.fromEntries(tokenResponse.headers.entries()),
+        isStreaming: false,
+        contentType: tokenResponse.headers.get('content-type') || undefined
       });
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
+        
+        // Log error response
+        await mcpTrafficLogger.logResponse(tokenExchangeRequestId, session.mcpServerName, {
+          status: tokenResponse.status,
+          statusText: tokenResponse.statusText,
+          headers: Object.fromEntries(tokenResponse.headers.entries()),
+          body: { error: errorText },
+          isStreaming: false,
+          contentType: tokenResponse.headers.get('content-type') || undefined
+        });
+        
         throw new Error(`Token exchange failed: ${tokenResponse.status} ${tokenResponse.statusText} - ${errorText}`);
       }
 
       const tokenSet = await tokenResponse.json() as any;
       
-      console.log('✅ Received token set:', {
+      console.log('✅ PKCE token exchange successful:', {
         hasAccessToken: !!tokenSet.access_token,
         hasRefreshToken: !!tokenSet.refresh_token,
         hasIdToken: !!tokenSet.id_token,
@@ -642,7 +938,7 @@ export class AuthManager {
         scope: tokenSet.scope
       });
       
-      // Add OAuth metadata needed for token refresh
+      // Create enhanced token set with metadata
       const enhancedTokenSet: StoredTokens = {
         access_token: tokenSet.access_token,
         refresh_token: tokenSet.refresh_token,
@@ -650,25 +946,32 @@ export class AuthManager {
         token_type: tokenSet.token_type,
         scope: tokenSet.scope,
         id_token: tokenSet.id_token,
-        // Store OAuth client metadata for future refresh operations
         token_endpoint: client.issuer.token_endpoint as string,
         client_id: client.client_id as string,
-        // Track when tokens were originally obtained
         issued_at: Date.now()
       };
       
-      // Return the enhanced token set with refresh metadata
       return enhancedTokenSet;
       
     } catch (error: any) {
-      console.error('❌ Token exchange error details:', {
-        error: error.message,
+      console.error('❌ PKCE token exchange failed:', error.message);
+      
+      // Log the error
+      await mcpTrafficLogger.logError(tokenExchangeRequestId, session.mcpServerName, {
+        error: 'TOKEN_EXCHANGE_ERROR',
+        message: `PKCE token exchange failed: ${error.message}`,
         stack: error.stack,
-        tokenEndpoint: client.issuer.token_endpoint
+        context: {
+          tokenEndpoint: client.issuer.token_endpoint,
+          clientId: client.client_id,
+          mcpServerName: session.mcpServerName
+        }
       });
+      
       throw error;
     }
   }
+
 
   /**
    * Clean up expired sessions periodically

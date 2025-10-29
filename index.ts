@@ -4,16 +4,7 @@
  * AI Coding Agent
  * 
  * This is an AI coding agent that runs Claude Code while providing it 
- * access token      // Check if this is a public route
-      const isPublicRoute = publicRoutes.some(route => {
-        if (route.endsWith('/') && route !== '/') {
-          // For routes ending with / (except root), check if path starts with the route
-          return req.path.startsWith(route);
-        } else {
-          // For exact routes (including root /), match exactly
-          return req.path === route;
-        }
-      });services.
+ * access to MCP services.
  */
 
 import express, { Application, Request, Response, NextFunction } from 'express';

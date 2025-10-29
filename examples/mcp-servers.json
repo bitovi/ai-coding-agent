@@ -1,8 +1,8 @@
 [
   {
-    "name": "bitovi-jira",
+    "name": "bitovi-mcp-bridge",
     "type": "url",
-    "url": "https://jira-mcp-auth-bridge-staging.bitovi.com/mcp",
+    "url": "https://jira-mcp-bridge.bitovi.com/mcp/",
     "authorization_token": null,
     "proxy": true,
     "tool_configuration": {
@@ -22,10 +22,11 @@
   {
     "name": "figma",
     "type": "url", 
-    "url": "https://figma.com/mcp/",
-    "authorization_token": "my-auth-token",
+    "url": "https://mcp.figma.com/mcp",
+    "authorization_token": null,
     "tool_configuration": {
       "enabled": true
-    }
+    },
+    "oauth_provider_configuration": null
   }
 ]

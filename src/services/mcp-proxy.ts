@@ -1,6 +1,7 @@
 import type { Request, Response as ExpressResponse, Express } from 'express';
 import type { ApiResponse } from '../types/index.js';
 import { handleError } from './common.js';
+import { mcpTrafficLogger } from '../utils/mcp-traffic-logger.js';
 
 interface ProxyRequest {
   method: string;
@@ -126,16 +127,19 @@ export function proxyMcpRequest(deps: ProxyServiceDeps) {
       // 3. Get authorization token from AuthManager
       let authToken = server.authorization_token;
       console.log(`🔗 [MCP-PROXY] Server has authorization_token: ${!!authToken}`);
+      console.log(`🔐 [DEBUG] Server authorization_token (FULL): ${authToken || 'null'}`);
       
       if (!authToken) {
         console.log(`🔗 [MCP-PROXY] No authorization_token in config, checking auth manager for tokens...`);
         const tokens = authManager.getTokens(mcpName);
         console.log(`🔗 [MCP-PROXY] Found tokens in auth manager: ${tokens ? 'YES' : 'NO'}`);
+        console.log(`🔐 [DEBUG] Auth manager tokens (FULL): ${JSON.stringify(tokens, null, 2)}`);
         
         authToken = tokens?.access_token;
       }
       
       console.log(`🔗 [MCP-PROXY] Final auth token available: ${!!authToken}`);
+      console.log(`🔐 [DEBUG] Final auth token (FULL): ${authToken || 'null'}`);
       
       // 4. Forward request with proper headers
       console.log(`🔗 [MCP-PROXY] Forwarding request to: ${actualTargetUrl}`);
@@ -264,6 +268,10 @@ async function forwardMcpRequest(
   console.log(`🚀 [MCP-FORWARD] Request method: ${request?.method || 'N/A'}`);
   console.log(`🚀 [MCP-FORWARD] Has auth token: ${authToken ? 'YES' : 'NO'}`);
   
+  // Generate request ID for tracking
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  console.log(`🚀 [MCP-FORWARD] Request ID: ${requestId}`);
+  
   const headers: Record<string, string> = {};
 
   // Forward all headers from the original client request except those we need to control
@@ -308,10 +316,15 @@ async function forwardMcpRequest(
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
     console.log(`🚀 [MCP-FORWARD] Added Authorization header with Bearer token`);
+    console.log(`🔐 [DEBUG] Full Authorization header: Bearer ${authToken}`);
+  } else {
+    console.log(`⚠️  [MCP-FORWARD] No auth token provided - request will be sent without Authorization header`);
   }
   
   // Log headers safely (without exposing sensitive Authorization header)
   const safeHeaders = { ...headers };
+  // TEMPORARY DEBUG: Show full Authorization header for debugging
+  console.log(`🔐 [DEBUG] Full Authorization header being sent: ${headers['Authorization'] || 'none'}`);
   if (safeHeaders['Authorization']) {
     safeHeaders['Authorization'] = '[Bearer token present]';
   }
@@ -340,6 +353,10 @@ async function forwardSSERequest(
 ): Promise<void> {
   console.log(`📡 [MCP-SSE] Starting SSE request to: ${serverUrl}`);
   
+  // Generate request ID for tracking
+  const requestId = `sse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  console.log(`📡 [MCP-SSE] Request ID: ${requestId}`);
+  
   // For SSE connections, forward the GET request as-is with appropriate headers
   if (!headers['Accept'] && !headers['accept']) {
     headers['Accept'] = 'text/event-stream';
@@ -349,6 +366,16 @@ async function forwardSSERequest(
   }
   
   console.log(`📡 [MCP-SSE] SSE headers:`, JSON.stringify(headers, null, 2));
+  
+  // Log the request
+  if (mcpName) {
+    await mcpTrafficLogger.logRequest(mcpName, {
+      method: 'GET',
+      url: serverUrl,
+      headers,
+      isStreaming: true
+    }, requestId);
+  }
   
   const fetchStartTime = Date.now();
   let response;
@@ -373,9 +400,34 @@ async function forwardSSERequest(
     console.log(`📡 [MCP-SSE] Fetch completed. Status: ${response.status} ${response.statusText}`);
     console.log(`📡 [MCP-SSE] Response headers:`, JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
     
+    // Log the response
+    if (mcpName) {
+      await mcpTrafficLogger.logResponse(requestId, mcpName, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        isStreaming: true,
+        contentType: response.headers.get('content-type') || undefined
+      });
+    }
+    
   } catch (error) {
     const fetchTime = Date.now() - fetchStartTime;
     console.error(`❌ [MCP-SSE] Fetch error after ${fetchTime}ms:`, error);
+    
+    // Log the error
+    if (mcpName) {
+      await mcpTrafficLogger.logError(requestId, mcpName, {
+        error: error.name || 'FetchError',
+        message: error.message || 'Unknown fetch error',
+        stack: error.stack,
+        context: {
+          serverUrl,
+          fetchTime,
+          method: 'GET'
+        }
+      });
+    }
     
     res.status(500).json({
       error: 'Fetch Error',
@@ -392,6 +444,21 @@ async function forwardSSERequest(
   
   if (!response.ok) {
     console.error(`❌ [MCP-SSE] Server responded with error: ${response.status} ${response.statusText}`);
+    
+    // Log the error response
+    if (mcpName) {
+      await mcpTrafficLogger.logError(requestId, mcpName, {
+        error: 'HTTP_ERROR',
+        message: `MCP server responded with ${response.status}: ${response.statusText}`,
+        context: {
+          status: response.status,
+          statusText: response.statusText,
+          serverUrl,
+          method: 'GET',
+          headers: Object.fromEntries(response.headers.entries())
+        }
+      });
+    }
     
     const errorResponse = {
       error: response.statusText || 'Error',
@@ -412,8 +479,8 @@ async function forwardSSERequest(
   
   console.log(`✅ [MCP-SSE] Server responded successfully, starting stream forwarding`);
   
-  // Handle SSE response
-  await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
+  // Handle SSE response - pass requestId for stream logging
+  await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin, requestId);
 }
 
 // Helper function to handle regular HTTP requests (POST/JSON-RPC)
@@ -426,6 +493,10 @@ async function forwardHttpRequest(
 ): Promise<ProxyResponse | void> {
   console.log(`🌐 [MCP-HTTP] Starting HTTP request to: ${serverUrl}`);
   console.log(`🌐 [MCP-HTTP] Request object:`, request ? JSON.stringify(request, null, 2) : 'null');
+  
+  // Generate request ID for tracking
+  const requestId = `http-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  console.log(`🌐 [MCP-HTTP] Request ID: ${requestId}`);
   
   // For POST requests, send JSON-RPC (if request is provided)
   // For direct proxy requests, just forward as-is
@@ -449,14 +520,70 @@ async function forwardHttpRequest(
     console.log(`🌐 [MCP-HTTP] Request body:`, JSON.stringify(requestBody, null, 2));
     console.log(`🌐 [MCP-HTTP] Request headers:`, JSON.stringify(headers, null, 2));
     
-    const response = await fetch(serverUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody)
-    });
+    // Log the request
+    if (mcpName) {
+      await mcpTrafficLogger.logRequest(mcpName, {
+        method: 'POST',
+        url: serverUrl,
+        headers,
+        body: requestBody,
+        isStreaming: false
+      }, requestId);
+    }
+    
+    let response;
+    try {
+      response = await fetch(serverUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+    } catch (error) {
+      console.error(`❌ [MCP-HTTP] Fetch error:`, error);
+      
+      // Log the fetch error
+      if (mcpName) {
+        await mcpTrafficLogger.logError(requestId, mcpName, {
+          error: 'FETCH_ERROR',
+          message: `Failed to connect to MCP server: ${error.message}`,
+          stack: error.stack,
+          context: {
+            serverUrl,
+            method: 'POST',
+            headers
+          }
+        });
+      }
+      
+      if (res) {
+        res.status(500).json({
+          error: 'Connection Error',
+          message: `Failed to connect to MCP server: ${error.message}`,
+          details: {
+            errorName: error.name,
+            serverUrl
+          },
+          timestamp: new Date().toISOString()
+        });
+        return;
+      } else {
+        throw error;
+      }
+    }
     
     console.log(`🌐 [MCP-HTTP] Response status: ${response.status} ${response.statusText}`);
     console.log(`🌐 [MCP-HTTP] Response headers:`, JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
+    
+    // Log the response
+    if (mcpName) {
+      await mcpTrafficLogger.logResponse(requestId, mcpName, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        isStreaming: false,
+        contentType: response.headers.get('content-type') || undefined
+      });
+    }
     
     // Check if response is streaming (SSE or chunked transfer)
     const contentType = response.headers.get('content-type');
@@ -468,14 +595,39 @@ async function forwardHttpRequest(
     // Only treat as streaming if response is OK and has streaming headers
     if (res && response.ok && (contentType?.includes('text/event-stream') || transferEncoding?.includes('chunked'))) {
       console.log(`🌐 [MCP-HTTP] Detected streaming response, forwarding stream`);
-      // Handle streaming response by forwarding stream
-      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
+      // Update response logging for streaming
+      if (mcpName) {
+        await mcpTrafficLogger.logResponse(requestId, mcpName, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          isStreaming: true,
+          contentType: response.headers.get('content-type') || undefined
+        });
+      }
+      // Handle streaming response by forwarding stream - pass requestId
+      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin, requestId);
       return; // No return value for streaming
     }
     
     // Handle non-streaming response (including errors)
     if (!response.ok) {
       console.error(`❌ [MCP-HTTP] Server error: ${response.status} ${response.statusText}`);
+      
+      // Log the error
+      if (mcpName) {
+        await mcpTrafficLogger.logError(requestId, mcpName, {
+          error: 'HTTP_ERROR',
+          message: `MCP server responded with ${response.status}: ${response.statusText}`,
+          context: {
+            status: response.status,
+            statusText: response.statusText,
+            serverUrl,
+            method: 'POST',
+            headers: Object.fromEntries(response.headers.entries())
+          }
+        });
+      }
       
       // Forward the actual status code from the target server
       const errorResponse = {
@@ -503,6 +655,18 @@ async function forwardHttpRequest(
     console.log(`✅ [MCP-HTTP] Processing successful JSON response`);
     const jsonResponse = await response.json() as ProxyResponse;
     console.log(`✅ [MCP-HTTP] JSON response:`, JSON.stringify(jsonResponse, null, 2));
+    
+    // Log the response body
+    if (mcpName) {
+      await mcpTrafficLogger.logResponse(requestId, mcpName, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: jsonResponse,
+        isStreaming: false,
+        contentType: response.headers.get('content-type') || undefined
+      });
+    }
     
     // Forward response headers back to client if we have Express response object
     if (res) {
@@ -558,15 +722,85 @@ async function forwardHttpRequest(
     
     console.log(`🌐 [MCP-HTTP] Direct request headers:`, JSON.stringify(headers, null, 2));
     
-    const response = await fetch(serverUrl, {
-      method: method,
-      headers
-    });
+    // Log the direct request
+    if (mcpName) {
+      await mcpTrafficLogger.logRequest(mcpName, {
+        method: method,
+        url: serverUrl,
+        headers,
+        isStreaming: method === 'GET' // GET requests are typically for streaming
+      }, requestId);
+    }
+    
+    let response;
+    try {
+      response = await fetch(serverUrl, {
+        method: method,
+        headers
+      });
+    } catch (error) {
+      console.error(`❌ [MCP-HTTP] Direct fetch error:`, error);
+      
+      // Log the fetch error
+      if (mcpName) {
+        await mcpTrafficLogger.logError(requestId, mcpName, {
+          error: 'FETCH_ERROR',
+          message: `Failed to connect to MCP server: ${error.message}`,
+          stack: error.stack,
+          context: {
+            serverUrl,
+            method: method,
+            headers
+          }
+        });
+      }
+      
+      if (res) {
+        res.status(500).json({
+          error: 'Connection Error',
+          message: `Failed to connect to MCP server: ${error.message}`,
+          details: {
+            errorName: error.name,
+            serverUrl
+          },
+          timestamp: new Date().toISOString()
+        });
+        return;
+      } else {
+        throw error;
+      }
+    }
     
     console.log(`🌐 [MCP-HTTP] Direct response status: ${response.status} ${response.statusText}`);
     
+    // Log the direct response
+    if (mcpName) {
+      await mcpTrafficLogger.logResponse(requestId, mcpName, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        isStreaming: false, // Will be updated if streaming is detected
+        contentType: response.headers.get('content-type') || undefined
+      });
+    }
+    
     if (!response.ok) {
       console.error(`❌ [MCP-HTTP] Direct request error: ${response.status} ${response.statusText}`);
+      
+      // Log the error
+      if (mcpName) {
+        await mcpTrafficLogger.logError(requestId, mcpName, {
+          error: 'HTTP_ERROR',
+          message: `MCP server responded with ${response.status}: ${response.statusText}`,
+          context: {
+            status: response.status,
+            statusText: response.statusText,
+            serverUrl,
+            method: method,
+            headers: Object.fromEntries(response.headers.entries())
+          }
+        });
+      }
       
       const errorResponse = {
         error: response.statusText || 'Error',
@@ -596,14 +830,38 @@ async function forwardHttpRequest(
     
     if (res && (contentType?.includes('text/event-stream') || transferEncoding?.includes('chunked'))) {
       console.log(`🌐 [MCP-HTTP] Direct streaming response detected`);
-      // Handle streaming response
-      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin);
+      
+      // Update response logging for streaming
+      if (mcpName) {
+        await mcpTrafficLogger.logResponse(requestId, mcpName, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          isStreaming: true,
+          contentType: response.headers.get('content-type') || undefined
+        });
+      }
+      
+      // Handle streaming response - pass requestId
+      await forwardStreamingResponse(response, res, mcpName, new URL(serverUrl).origin, requestId);
       return;
     } else {
       console.log(`🌐 [MCP-HTTP] Direct regular response`);
       // Handle regular response
       const jsonResponse = await response.json() as ProxyResponse;
       console.log(`🌐 [MCP-HTTP] Direct JSON response:`, JSON.stringify(jsonResponse, null, 2));
+      
+      // Log the response body for direct requests
+      if (mcpName) {
+        await mcpTrafficLogger.logResponse(requestId, mcpName, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: jsonResponse,
+          isStreaming: false,
+          contentType: response.headers.get('content-type') || undefined
+        });
+      }
       
       // Forward response headers back to client if we have Express response object
       if (res) {
@@ -643,12 +901,14 @@ async function forwardStreamingResponse(
   sourceResponse: Response, 
   targetResponse: ExpressResponse, 
   mcpName?: string, 
-  serverBaseUrl?: string
+  serverBaseUrl?: string,
+  requestId?: string
 ): Promise<void> {
   console.log(`🌊 [MCP-STREAM] Starting stream forwarding`);
   console.log(`🌊 [MCP-STREAM] Source response status: ${sourceResponse.status}`);
   console.log(`🌊 [MCP-STREAM] MCP name: ${mcpName || 'N/A'}`);
   console.log(`🌊 [MCP-STREAM] Server base URL: ${serverBaseUrl || 'N/A'}`);
+  console.log(`🌊 [MCP-STREAM] Request ID: ${requestId || 'N/A'}`);
   
   const contentType = sourceResponse.headers.get('content-type');
   const isSSE = contentType?.includes('text/event-stream');
@@ -710,31 +970,83 @@ async function forwardStreamingResponse(
     const reader = sourceStream.getReader();
     console.log(`🌊 [MCP-STREAM] Reader obtained`);
     
+    // Set up a timeout for reading inactivity (5 minutes)
+    let readTimeoutId: NodeJS.Timeout | null = null;
+    const STREAM_READ_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+    
+    const resetReadTimeout = () => {
+      if (readTimeoutId) {
+        clearTimeout(readTimeoutId);
+      }
+      readTimeoutId = setTimeout(() => {
+        console.log(`⏰ [MCP-STREAM] Stream read timeout after ${STREAM_READ_TIMEOUT/1000} seconds`);
+        try {
+          reader.cancel('Stream read timeout');
+        } catch (cancelError) {
+          console.log(`⚠️ [MCP-STREAM] Reader already cancelled during timeout`);
+        }
+      }, STREAM_READ_TIMEOUT);
+    };
+    
+    // Start the timeout
+    resetReadTimeout();
+    
     // Handle client disconnect
     targetResponse.on('close', () => {
       console.log(`🔌 [MCP-STREAM] Client disconnected, cancelling reader`);
-      reader.cancel('Client disconnected');
+      if (readTimeoutId) clearTimeout(readTimeoutId);
+      try {
+        reader.cancel('Client disconnected');
+      } catch (cancelError) {
+        console.log(`⚠️ [MCP-STREAM] Reader already cancelled or closed`);
+      }
     });
     
     targetResponse.on('error', (error) => {
       console.error(`❌ [MCP-STREAM] Target response error:`, error);
-      reader.cancel('Target response error');
+      if (readTimeoutId) clearTimeout(readTimeoutId);
+      try {
+        reader.cancel('Target response error');
+      } catch (cancelError) {
+        console.log(`⚠️ [MCP-STREAM] Reader already cancelled or closed`);
+      }
     });
     
     let chunkCount = 0;
     
-    while (true) {
-      const { done, value } = await reader.read();
-      
-      if (done) {
-        console.log(`✅ [MCP-STREAM] Stream completed after ${chunkCount} chunks`);
-        break;
-      }
+    try {
+      while (true) {
+        let readResult;
+        try {
+          readResult = await reader.read();
+          resetReadTimeout(); // Reset timeout on successful read
+        } catch (readError) {
+          console.log(`⚠️ [MCP-STREAM] Read error (likely timeout or connection closed):`, readError.message);
+          // This is expected for timeouts - just break the loop
+          break;
+        }
+        
+        const { done, value } = readResult;
+        
+        if (done) {
+          console.log(`✅ [MCP-STREAM] Stream completed after ${chunkCount} chunks`);
+          
+          // Log stream completion
+          if (mcpName && requestId) {
+            await mcpTrafficLogger.logCustomEvent(requestId, mcpName, 'STREAM_COMPLETED', {
+              totalChunks: chunkCount,
+              streamType: isSSE ? 'SSE' : 'CHUNKED'
+            });
+          }
+          break;
+        }
       
       chunkCount++;
       if (chunkCount <= 5 || chunkCount % 10 === 0) {
         console.log(`🌊 [MCP-STREAM] Processing chunk ${chunkCount}, size: ${value?.length || 0} bytes`);
       }
+      
+      let processedChunk: string | Uint8Array = value;
       
       // For SSE responses with rewriting capability, process the chunk
       if (isSSE && mcpName && serverBaseUrl) {
@@ -750,18 +1062,66 @@ async function forwardStreamingResponse(
           console.log(`🌊 [MCP-STREAM] Rewritten chunk ${chunkCount}:`, chunk.substring(0, 200));
         }
         
-        targetResponse.write(new TextEncoder().encode(chunk));
+        processedChunk = new TextEncoder().encode(chunk);
+        
+        // Log chunk data (limit content for large chunks)
+        if (mcpName && requestId) {
+          await mcpTrafficLogger.logStreamChunk(requestId, mcpName, {
+            chunkNumber: chunkCount,
+            chunkSize: chunk.length,
+            content: chunk.length > 1000 ? chunk.substring(0, 1000) + '...[TRUNCATED]' : chunk,
+            isSSE: true
+          });
+        }
+        
+        targetResponse.write(processedChunk);
       } else {
         // Forward the chunk as-is
-        targetResponse.write(value);
+        processedChunk = value;
+        
+        // Log chunk data for non-SSE streams
+        if (mcpName && requestId) {
+          const chunkText = new TextDecoder().decode(value);
+          await mcpTrafficLogger.logStreamChunk(requestId, mcpName, {
+            chunkNumber: chunkCount,
+            chunkSize: value.length,
+            content: chunkText.length > 1000 ? chunkText.substring(0, 1000) + '...[TRUNCATED]' : chunkText,
+            isSSE: false
+          });
+        }
+        
+        targetResponse.write(processedChunk);
       }
     }
+    
+    // Clear timeout on successful completion
+    if (readTimeoutId) clearTimeout(readTimeoutId);
     
     console.log(`✅ [MCP-STREAM] Stream forwarding completed successfully`);
     targetResponse.end();
     
+    } catch (whileLoopError) {
+      console.log(`⚠️ [MCP-STREAM] While loop error (stream terminated):`, whileLoopError.message);
+      // Clear timeout on error
+      if (readTimeoutId) clearTimeout(readTimeoutId);
+      // This is expected for stream timeouts/terminations
+    }
+    
   } catch (error) {
     console.error(`❌ [MCP-STREAM] Error forwarding stream:`, error);
+    
+    // Log the stream error
+    if (mcpName && requestId) {
+      await mcpTrafficLogger.logError(requestId, mcpName, {
+        error: 'STREAM_ERROR',
+        message: `Stream forwarding failed: ${error.message}`,
+        stack: error.stack,
+        context: {
+          streamType: isSSE ? 'SSE' : 'CHUNKED',
+          contentType: sourceResponse.headers.get('content-type')
+        }
+      });
+    }
     
     // Send error in appropriate format
     if (isSSE) {
