@@ -2,6 +2,9 @@
 
 This is an AI coding agent that runs Claude with MCP (Model Context Protocol) service integration. It provides a web interface for managing prompts and MCP service connections, handling OAuth authorization flows, and executing Claude prompts with access to external tools and data sources.
 
+👉 Bitovi can help you integrate this into your own SDLC workflow: [AI for Software Teams](https://www.bitovi.com/ai-for-software-teams)
+
+
 ## Features
 
 - 🤖 **Claude Integration**: Execute prompts using Claude 3.5 Sonnet with MCP servers
